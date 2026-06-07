@@ -1,0 +1,45 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { z } from 'zod'
+
+const itemSchema = z.object({
+  category: z.string().min(2),
+  name: z.string().min(2),
+  description: z.string().optional(),
+  price: z.number().positive(),
+  isVeg: z.boolean().default(false),
+  imageUrl: z.string().url().optional(),
+})
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ restaurantId: string }> }) {
+  try {
+    const { restaurantId } = await params
+    const items = await prisma.menuItem.findMany({
+      where: { restaurantId, isAvailable: true },
+      orderBy: [{ category: 'asc' }, { name: 'asc' }],
+    })
+    return NextResponse.json(items)
+  } catch {
+    return NextResponse.json({ error: 'Failed to fetch menu items' }, { status: 500 })
+  }
+}
+
+export async function POST(req: NextRequest, { params }: { params: Promise<{ restaurantId: string }> }) {
+  try {
+    const session = await auth()
+    if (!session || session.user.role === 'CUSTOMER') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+
+    const { restaurantId } = await params
+    const body = await req.json()
+    const parsed = itemSchema.safeParse(body)
+    if (!parsed.success) return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 })
+
+    const item = await prisma.menuItem.create({ data: { ...parsed.data, restaurantId } })
+    return NextResponse.json(item, { status: 201 })
+  } catch {
+    return NextResponse.json({ error: 'Failed to create menu item' }, { status: 500 })
+  }
+}
