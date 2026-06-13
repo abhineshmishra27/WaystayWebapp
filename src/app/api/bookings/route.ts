@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { rateLimit } from '@/lib/rate-limit'
 import { razorpay } from '@/lib/razorpay'
+import { sendBookingConfirmation } from '@/lib/email'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 
@@ -15,6 +16,7 @@ const createBookingSchema = z.object({
   guestEmail: z.string().email(),
   guestPhone: z.string().min(10),
   totalAmount: z.number().positive(),
+  paymentMethod: z.enum(['RAZORPAY', 'PAY_AT_HOTEL']).default('RAZORPAY'),
 })
 
 function dateRange(startDate: string, endDate: string) {
@@ -27,6 +29,29 @@ function dateRange(startDate: string, endDate: string) {
     dates.push(current.toISOString().split('T')[0])
   }
   return dates
+}
+
+function todayInIndia() {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+
+  const year = parts.find(part => part.type === 'year')?.value
+  const month = parts.find(part => part.type === 'month')?.value
+  const day = parts.find(part => part.type === 'day')?.value
+
+  return `${year}-${month}-${day}`
+}
+
+function isRazorpayConfigured() {
+  return Boolean(
+    process.env.RAZORPAY_KEY_ID?.startsWith('rzp_') &&
+    process.env.RAZORPAY_KEY_SECRET &&
+    process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.startsWith('rzp_')
+  )
 }
 
 export async function GET(_req: NextRequest) {
@@ -78,7 +103,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 })
     }
 
-    const { slotId, guestName, guestEmail, guestPhone, totalAmount, startDate, endDate, slotType } = parsed.data
+    const { slotId, guestName, guestEmail, guestPhone, startDate, endDate, slotType, paymentMethod } = parsed.data
+    if (paymentMethod === 'RAZORPAY' && !isRazorpayConfigured()) {
+      return NextResponse.json(
+        { error: 'Payment gateway credentials are not configured. Please use Pay at Hotel or add Razorpay test keys.' },
+        { status: 503 }
+      )
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       // Lock the slot
@@ -90,6 +121,8 @@ export async function POST(req: NextRequest) {
       const rangeEnd = endDate ?? rangeStart
       const dates = dateRange(rangeStart, rangeEnd)
       if (dates.length === 0) throw new Error('Invalid booking date range')
+      if (rangeStart < todayInIndia()) throw new Error('Past dates cannot be booked')
+      if (slot.date !== rangeStart) throw new Error('Selected slot does not match the booking date')
       if (dates.length > 1 && (slotType !== 'FULLDAY' || slot.slotType !== 'FULLDAY')) {
         throw new Error('Multi-day bookings require a full-day slot')
       }
@@ -127,7 +160,13 @@ export async function POST(req: NextRequest) {
 
       const hours: Record<string, number> = { H3: 3, H6: 6, H12: 12, FULLDAY: 24 }
       const totalHours = (hours[slot.slotType] || 3) * dates.length
-      const bookingAmount = slot.slotType === 'FULLDAY' ? slot.room.priceFullDay * dates.length : totalAmount
+      const slotPrices = {
+        H3: slot.room.price_3h,
+        H6: slot.room.price_6h,
+        H12: slot.room.price_12h,
+        FULLDAY: slot.room.priceFullDay * dates.length,
+      }
+      const bookingAmount = slotPrices[slot.slotType as keyof typeof slotPrices]
 
       // Create booking
       const booking = await tx.booking.create({
@@ -141,16 +180,26 @@ export async function POST(req: NextRequest) {
           guestName,
           guestEmail,
           guestPhone,
-          status: 'PENDING',
+          status: paymentMethod === 'PAY_AT_HOTEL' ? 'CONFIRMED' : 'PENDING',
         },
       })
 
+      if (paymentMethod === 'PAY_AT_HOTEL') {
+        return { booking, razorpayOrderId: null }
+      }
+
       // Create Razorpay order
-      const order = await razorpay.orders.create({
-        amount: Math.round(booking.totalAmount * 100),
-        currency: 'INR',
-        receipt: booking.id.slice(-20),
-      })
+      let order: { id: string }
+      try {
+        order = await razorpay.orders.create({
+          amount: Math.round(booking.totalAmount * 100),
+          currency: 'INR',
+          receipt: booking.id.slice(-20),
+        })
+      } catch (error) {
+        console.error('Razorpay order error:', error)
+        throw new Error('Payment gateway authentication failed')
+      }
 
       // Create pending payment record
       await tx.payment.create({
@@ -167,6 +216,25 @@ export async function POST(req: NextRequest) {
       return { booking, razorpayOrderId: order.id }
     })
 
+    if (!result.razorpayOrderId) {
+      try {
+        const booking = await prisma.booking.findUnique({
+          where: { id: result.booking.id },
+          include: { roomSlot: { include: { room: { include: { hotel: true } } } } },
+        })
+        if (booking) await sendBookingConfirmation(booking)
+      } catch (emailErr) {
+        console.error('Email error (non-blocking):', emailErr)
+      }
+
+      return NextResponse.json({
+        bookingId: result.booking.id,
+        paymentMethod: 'PAY_AT_HOTEL',
+        amount: Math.round(result.booking.totalAmount * 100),
+        currency: 'INR',
+      }, { status: 201 })
+    }
+
     return NextResponse.json({
       bookingId: result.booking.id,
       razorpayOrderId: result.razorpayOrderId,
@@ -180,11 +248,17 @@ export async function POST(req: NextRequest) {
       [
         'This slot is no longer available',
         'Invalid booking date range',
+        'Past dates cannot be booked',
+        'Selected slot does not match the booking date',
         'Multi-day bookings require a full-day slot',
         'One or more selected dates are no longer available',
+        'Payment gateway authentication failed',
       ].includes(err.message)
     ) {
-      return NextResponse.json({ error: err.message }, { status: 409 })
+      return NextResponse.json(
+        { error: err.message },
+        { status: err.message === 'Payment gateway authentication failed' ? 503 : 409 }
+      )
     }
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 })
   }

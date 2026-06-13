@@ -22,6 +22,7 @@ export default function LoginPage() {
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const registered = searchParams.get('registered') === 'true' || searchParams.has('registered')
   const unauthorized = searchParams.get('error') === 'unauthorized'
+  const returnTo = searchParams.get('returnTo')
 
   const onSubmit = async (data: FormData) => {
     setLoading(true)
@@ -31,13 +32,12 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    // Fetch session to get role for redirect
-    const res = await fetch('/api/auth/session')
-    const session = await res.json()
-    const role = session?.user?.role
-    if (role === 'ADMIN') router.push('/admin')
-    else if (role === 'OWNER') router.push('/owner')
-    else router.push('/dashboard')
+    if (returnTo?.startsWith('/') && !returnTo.startsWith('//')) {
+      router.push(returnTo)
+      return
+    }
+
+    router.push('/hotels')
   }
 
   return (

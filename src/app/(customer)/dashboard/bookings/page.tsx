@@ -23,7 +23,7 @@ interface BookingSummary {
     slotType: string
     room: { name: string; hotel: { id: string; name: string; city: string } }
   }
-  payment: { status: string } | null
+  payment: { status: string; provider: string } | null
 }
 
 export default function BookingsPage() {
@@ -39,11 +39,11 @@ export default function BookingsPage() {
   }, [])
 
   const handleCancel = async (bookingId: string) => {
-    if (!confirm('Cancel this booking? A refund will be initiated.')) return
+    if (!confirm('Cancel this booking?')) return
     const res = await fetch(`/api/bookings/${bookingId}/cancel`, { method: 'PATCH' })
     if (res.ok) {
       setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'CANCELLED' } : b))
-      toast.success('Booking cancelled. Refund will arrive in 5–7 days.')
+      toast.success('Booking cancelled')
     } else {
       toast.error('Failed to cancel booking')
     }
@@ -83,6 +83,9 @@ export default function BookingsPage() {
             {filtered.map(b => {
               const hotel = b.roomSlot?.room?.hotel
               const slot = b.roomSlot
+              const paymentLabel = b.payment
+                ? b.payment.status === 'SUCCESS' ? 'Paid online' : `Payment ${b.payment.status.toLowerCase()}`
+                : 'Pay at hotel'
               return (
                 <div key={b.id} className="bg-white rounded-2xl border border-gray-100 p-6">
                   <div className="flex items-start justify-between mb-4">
@@ -96,6 +99,9 @@ export default function BookingsPage() {
                     <div><p className="text-gray-400 text-xs">Date</p><p className="font-medium">{slot?.date}</p></div>
                     <div><p className="text-gray-400 text-xs">Time</p><p className="font-medium">{slot?.startTime} – {slot?.endTime}</p></div>
                     <div><p className="text-gray-400 text-xs">Amount</p><p className="font-medium text-indigo-600">₹{b.totalAmount}</p></div>
+                  </div>
+                  <div className="mb-4">
+                    <span className="inline-flex text-xs px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-medium">{paymentLabel}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-gray-300 font-mono">{b.id}</p>

@@ -1,7 +1,13 @@
 import Link from 'next/link'
 
-export default async function BookingSuccessPage({ searchParams }: { searchParams: Record<string, string> }) {
-  const bookingId = searchParams.bookingId
+export default async function BookingSuccessPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const query = await searchParams
+  const bookingId = Array.isArray(query.bookingId) ? query.bookingId[0] : query.bookingId
+  const paymentMethod = Array.isArray(query.paymentMethod) ? query.paymentMethod[0] : query.paymentMethod
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
@@ -10,7 +16,11 @@ export default async function BookingSuccessPage({ searchParams }: { searchParam
           <span className="text-green-600 text-2xl">✓</span>
         </div>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Booking confirmed!</h1>
-        <p className="text-gray-500 mb-4">A confirmation email has been sent to you.</p>
+        <p className="text-gray-500 mb-4">
+          {paymentMethod === 'pay-at-hotel'
+            ? 'No online payment was collected. You can pay directly at the hotel.'
+            : 'A confirmation email has been sent to you.'}
+        </p>
         {bookingId && (
           <p className="text-sm text-gray-400 mb-6">Booking ID: <span className="font-mono text-gray-600">{bookingId}</span></p>
         )}

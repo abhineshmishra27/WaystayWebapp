@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
 
+function todayInIndia() {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+
+  const year = parts.find(part => part.type === 'year')?.value
+  const month = parts.find(part => part.type === 'month')?.value
+  const day = parts.find(part => part.type === 'day')?.value
+
+  return `${year}-${month}-${day}`
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
   try {
     const { roomId } = await params
@@ -10,11 +25,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
     const startDate = searchParams.get('startDate') ?? date
     const endDate = searchParams.get('endDate') ?? startDate
 
+    const today = todayInIndia()
+    const effectiveStartDate = startDate && startDate > today ? startDate : today
+    const effectiveEndDate = endDate && endDate > effectiveStartDate ? endDate : effectiveStartDate
+
     const where: Prisma.RoomSlotWhereInput = { roomId }
-    if (startDate && endDate) {
-      where.date = { gte: startDate, lte: endDate }
+    if (effectiveStartDate && effectiveEndDate) {
+      where.date = { gte: effectiveStartDate, lte: effectiveEndDate }
     } else if (date) {
-      where.date = date
+      where.date = { gte: today }
     }
 
     const slots = await prisma.roomSlot.findMany({

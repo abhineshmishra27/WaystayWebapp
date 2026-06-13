@@ -13,6 +13,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         rooms: {
           where: { isActive: true },
           include: { _count: { select: { slots: { where: { isBooked: false } } } } },
+          orderBy: { price_3h: 'asc' },
         },
         reviews: {
           include: {

@@ -13,6 +13,10 @@ const schema = z.object({
   bookingId: z.string(),
 })
 
+function isRazorpayConfigured() {
+  return Boolean(process.env.RAZORPAY_KEY_SECRET && process.env.RAZORPAY_KEY_ID?.startsWith('rzp_'))
+}
+
 export async function POST(req: NextRequest) {
   try {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
@@ -29,9 +33,12 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
 
     const { razorpayPaymentId, razorpayOrderId, razorpaySignature, bookingId } = parsed.data
+    if (!isRazorpayConfigured()) {
+      return NextResponse.json({ error: 'Payment gateway credentials are not configured' }, { status: 503 })
+    }
 
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET as string)
       .update(`${razorpayOrderId}|${razorpayPaymentId}`)
       .digest('hex')
 

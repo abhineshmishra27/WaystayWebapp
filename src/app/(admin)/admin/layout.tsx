@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import LogoutButton from '@/components/LogoutButton'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -27,8 +28,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </Link>
           ))}
         </nav>
-        <div className="absolute bottom-4 left-4 text-xs text-gray-400">
-          Logged in as {session.user.name}
+        <div className="absolute bottom-4 left-4 right-4">
+          <p className="text-xs text-gray-400">Logged in as</p>
+          <p className="text-sm font-medium text-gray-800 truncate">{session.user.name}</p>
+          <LogoutButton className="mt-2 block text-xs text-red-500 hover:underline disabled:opacity-60" />
         </div>
       </aside>
       <main className="ml-56 flex-1 p-8">{children}</main>

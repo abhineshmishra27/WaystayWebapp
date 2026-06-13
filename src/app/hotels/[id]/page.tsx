@@ -1,18 +1,58 @@
 import { notFound } from 'next/navigation'
 import Image from 'next/image'
+import { headers } from 'next/headers'
 import type { HotelImage, Room } from '@prisma/client'
 import SlotPicker from '@/components/hotels/SlotPicker'
 import ReviewList from '@/components/hotels/ReviewList'
 import RestaurantMenu from '@/components/hotels/RestaurantMenu'
 
+type SlotType = 'H3' | 'H6' | 'H12' | 'FULLDAY'
+type RoomWithDetails = Room & { amenities: string[]; images: string[]; _count: { slots: number } }
+
+function getSelectedSlot(value: string | string[] | undefined): SlotType {
+  const slot = Array.isArray(value) ? value[0] : value
+  return slot === 'H6' || slot === 'H12' || slot === 'FULLDAY' ? slot : 'H3'
+}
+
+function getSearchValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value
+}
+
+function getSlotPrice(room: Room, slot: SlotType) {
+  if (slot === 'H6') return room.price_6h
+  if (slot === 'H12') return room.price_12h
+  if (slot === 'FULLDAY') return room.priceFullDay
+  return room.price_3h
+}
+
+function getSlotLabel(slot: SlotType) {
+  if (slot === 'H6') return '6-hour slot'
+  if (slot === 'H12') return '12-hour slot'
+  if (slot === 'FULLDAY') return 'Full day'
+  return '3-hour slot'
+}
+
 async function getHotel(id: string) {
-  const res = await fetch(`/api/hotels/${id}`, { cache: 'no-store' })
+  const headerStore = await headers()
+  const host = headerStore.get('host') || 'localhost:3000'
+  const protocol = headerStore.get('x-forwarded-proto') || 'http'
+  const res = await fetch(`${protocol}://${host}/api/hotels/${id}`, { cache: 'no-store' })
   if (!res.ok) return null
   return res.json()
 }
 
-export default async function HotelDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function HotelDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
+  const query = await searchParams
+  const selectedSlot = getSelectedSlot(query.slot)
+  const initialStartDate = getSearchValue(query.startDate)
+  const initialEndDate = getSearchValue(query.endDate)
   const hotel = await getHotel(id)
   if (!hotel) notFound()
 
@@ -70,7 +110,7 @@ export default async function HotelDetailPage({ params }: { params: Promise<{ id
 
           <div>
             <h2 className="text-xl font-semibold mb-4">Available rooms</h2>
-            {hotel.rooms.map((room: Room & { amenities: string[]; _count: { slots: number } }) => (
+            {hotel.rooms.map((room: RoomWithDetails) => (
               <div key={room.id} className="bg-white rounded-2xl border border-gray-100 p-6 mb-4">
                 <div className="flex justify-between items-start mb-3 gap-4">
                   <div>
@@ -81,10 +121,30 @@ export default async function HotelDetailPage({ params }: { params: Promise<{ id
                     <p className="text-sm text-gray-500">{room.description} · Max {room.maxOccupancy} guests</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-indigo-600 font-bold">₹{room.pricePerHour}<span className="text-xs text-gray-400 font-normal">/hr</span></p>
-                    <p className="text-gray-500 text-sm">₹{room.priceFullDay}/day</p>
+                    <p className="text-indigo-600 font-bold">₹{getSlotPrice(room, selectedSlot)}<span className="text-xs text-gray-400 font-normal"> {getSlotLabel(selectedSlot)}</span></p>
+                    <p className="text-gray-500 text-sm">₹{room.priceFullDay} full day</p>
                   </div>
                 </div>
+                {room.images.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
+                      {room.images.map((imageUrl, index) => (
+                        <div
+                          key={`${room.id}-${imageUrl}`}
+                          className="relative h-24 w-36 shrink-0 overflow-hidden rounded-xl bg-gray-100 snap-start sm:h-28 sm:w-44"
+                        >
+                          <Image
+                            src={imageUrl}
+                            alt={`${room.name} photo ${index + 1}`}
+                            fill
+                            sizes="(min-width: 640px) 176px, 144px"
+                            className="object-cover transition-transform duration-300 hover:scale-105"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {room.amenities.length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-4">
                     {room.amenities.map((a: string) => (
@@ -92,7 +152,17 @@ export default async function HotelDetailPage({ params }: { params: Promise<{ id
                     ))}
                   </div>
                 )}
-                <SlotPicker roomId={room.id} pricePerHour={room.pricePerHour} priceFullDay={room.priceFullDay} hotelId={hotel.id} />
+                <SlotPicker
+                  roomId={room.id}
+                  price3h={room.price_3h}
+                  price6h={room.price_6h}
+                  price12h={room.price_12h}
+                  priceFullDay={room.priceFullDay}
+                  hotelId={hotel.id}
+                  initialSlotType={selectedSlot}
+                  initialStartDate={initialStartDate}
+                  initialEndDate={initialEndDate}
+                />
               </div>
             ))}
           </div>
@@ -104,8 +174,9 @@ export default async function HotelDetailPage({ params }: { params: Promise<{ id
 
         <div className="hidden lg:block">
           <div className="bg-white rounded-2xl border border-gray-100 p-6 sticky top-8">
-            <p className="text-2xl font-bold text-indigo-600">₹{hotel.rooms[0]?.pricePerHour || '–'}<span className="text-sm text-gray-400 font-normal">/hr</span></p>
-            <p className="text-gray-500 text-sm mb-4">Starting price · scroll down to choose a room</p>
+            <p className="text-2xl font-bold text-indigo-600">₹{hotel.rooms[0] ? getSlotPrice(hotel.rooms[0], selectedSlot) : '–'}<span className="text-sm text-gray-400 font-normal"> {getSlotLabel(selectedSlot)}</span></p>
+            <p className="text-gray-500 text-sm mb-1">Selected slot price · scroll down to choose a room</p>
+            <p className="text-gray-500 text-sm mb-4">Full day from ₹{hotel.rooms[0]?.priceFullDay || '–'}</p>
             <div className="space-y-2 text-sm text-gray-600">
               <div className="flex justify-between"><span>Check-in</span><span className="font-medium">{hotel.checkInTime}</span></div>
               <div className="flex justify-between"><span>Check-out</span><span className="font-medium">{hotel.checkOutTime}</span></div>

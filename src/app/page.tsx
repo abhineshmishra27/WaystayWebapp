@@ -3,12 +3,21 @@ import Link from 'next/link'
 import SearchBar from '@/components/hotels/SearchBar'
 
 const POPULAR_CITIES = [
-  { name: 'Mumbai', image: 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400' },
-  { name: 'Delhi', image: 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400' },
-  { name: 'Bangalore', image: 'https://images.unsplash.com/photo-1596176530529-78163a4f7af2?w=400' },
-  { name: 'Goa', image: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=400' },
-  { name: 'Jaipur', image: 'https://images.unsplash.com/photo-1599661046289-e31897846e41?w=400' },
-  { name: 'Chennai', image: 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=400' },
+  {
+    name: 'Mumbai',
+    image: 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?auto=format&fit=crop&w=900&q=80',
+    alt: 'Gateway of India and Mumbai waterfront',
+  },
+  {
+    name: 'Delhi',
+    image: 'https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=900&q=80',
+    alt: 'India Gate in Delhi',
+  },
+  {
+    name: 'Bangalore',
+    image: 'https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=900&q=80',
+    alt: 'Bangalore city skyline',
+  },
 ]
 
 export default function HomePage() {
@@ -24,7 +33,7 @@ export default function HomePage() {
 
       <div className="max-w-6xl mx-auto px-4 py-16">
         <h2 className="text-2xl font-semibold text-gray-900 mb-8">Popular destinations</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {POPULAR_CITIES.map(city => (
             <Link
               key={city.name}
@@ -33,8 +42,9 @@ export default function HomePage() {
             >
               <Image
                 src={city.image}
-                alt={city.name}
+                alt={city.alt}
                 fill
+                sizes="(min-width: 768px) 33vw, 100vw"
                 style={{ objectFit: 'cover' }}
                 className="group-hover:scale-105 transition-transform duration-300"
               />

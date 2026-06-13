@@ -1,15 +1,28 @@
 'use client'
 
 import { signOut } from 'next-auth/react'
+import { useState } from 'react'
 
-export default function LogoutButton() {
+type LogoutButtonProps = {
+  className?: string
+}
+
+export default function LogoutButton({ className = 'text-xs text-red-500 mt-2 hover:underline' }: LogoutButtonProps) {
+  const [isSigningOut, setIsSigningOut] = useState(false)
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true)
+    await signOut({ redirectTo: '/login' })
+  }
+
   return (
     <button
       type="button"
-      onClick={() => signOut({ callbackUrl: '/login' })}
-      className="text-xs text-red-500 mt-2 hover:underline"
+      onClick={handleSignOut}
+      disabled={isSigningOut}
+      className={className}
     >
-      Sign out
+      {isSigningOut ? 'Signing out...' : 'Sign out'}
     </button>
   )
 }

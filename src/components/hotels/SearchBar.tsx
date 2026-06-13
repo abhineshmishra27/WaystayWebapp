@@ -9,17 +9,45 @@ const SLOT_OPTIONS = [
   { value: 'FULLDAY', label: 'Full Day' },
 ]
 
-export default function SearchBar({ className = '' }: { className?: string }) {
-  const router = useRouter()
-  const [city, setCity] = useState('')
-  const today = new Date().toISOString().split('T')[0]
-  const [startDate, setStartDate] = useState(today)
-  const [endDate, setEndDate] = useState(today)
-  const [slot, setSlot] = useState('H3')
+type SlotValue = 'H3' | 'H6' | 'H12' | 'FULLDAY'
 
-  const handleSearch = () => {
-    if (!city.trim()) return
-    const params = new URLSearchParams({ city, startDate, endDate, slot })
+function normalizeSlot(slot?: string): SlotValue {
+  return slot === 'H6' || slot === 'H12' || slot === 'FULLDAY' ? slot : 'H3'
+}
+
+export default function SearchBar({
+  className = '',
+  initialCity = '',
+  initialStartDate,
+  initialEndDate,
+  initialSlot,
+}: {
+  className?: string
+  initialCity?: string
+  initialStartDate?: string
+  initialEndDate?: string
+  initialSlot?: string
+}) {
+  const router = useRouter()
+  const today = new Date().toISOString().split('T')[0]
+  const [city, setCity] = useState(initialCity)
+  const [startDate, setStartDate] = useState(initialStartDate || today)
+  const [endDate, setEndDate] = useState(initialEndDate || initialStartDate || today)
+  const [slot, setSlot] = useState<SlotValue>(normalizeSlot(initialSlot))
+
+  const handleSearch = (next?: Partial<{ city: string; startDate: string; endDate: string; slot: SlotValue }>) => {
+    const nextCity = next?.city ?? city
+    const nextStartDate = next?.startDate ?? startDate
+    const nextEndDate = next?.endDate ?? endDate
+    const nextSlot = next?.slot ?? slot
+
+    if (!nextCity.trim()) return
+    const params = new URLSearchParams({
+      city: nextCity,
+      startDate: nextStartDate,
+      endDate: nextSlot === 'FULLDAY' ? nextEndDate : nextStartDate,
+      slot: nextSlot,
+    })
     router.push('/hotels?' + params.toString())
   }
 
@@ -54,8 +82,11 @@ export default function SearchBar({ className = '' }: { className?: string }) {
       <select
         value={slot}
         onChange={e => {
-          setSlot(e.target.value)
-          if (e.target.value !== 'FULLDAY') setEndDate(startDate)
+          const nextSlot = normalizeSlot(e.target.value)
+          const nextEndDate = nextSlot === 'FULLDAY' ? endDate : startDate
+          setSlot(nextSlot)
+          setEndDate(nextEndDate)
+          handleSearch({ slot: nextSlot, endDate: nextEndDate })
         }}
         className="px-4 py-3 text-gray-800 text-sm focus:outline-none rounded-xl bg-white border-l border-gray-100"
       >
@@ -67,7 +98,7 @@ export default function SearchBar({ className = '' }: { className?: string }) {
       </select>
       <button
         type="button"
-        onClick={handleSearch}
+        onClick={() => handleSearch()}
         className="bg-indigo-600 text-white px-8 py-3 rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors whitespace-nowrap"
       >
         Search hotels

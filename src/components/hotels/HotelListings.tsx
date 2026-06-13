@@ -1,9 +1,14 @@
 import Image from 'next/image'
 import Link from 'next/link'
+import { headers } from 'next/headers'
 
 async function fetchHotels(params: Record<string, string>) {
   const query = new URLSearchParams(params).toString()
-  const res = await fetch(`/api/search?${query}`, { cache: 'no-store' })
+  const headerStore = await headers()
+  const host = headerStore.get('host') || 'localhost:3000'
+  const protocol = headerStore.get('x-forwarded-proto') || 'http'
+  const baseUrl = `${protocol}://${host}`
+  const res = await fetch(`${baseUrl}/api/search?${query}`, { cache: 'no-store' })
   if (!res.ok) return { hotels: [] }
 
   try {
@@ -45,15 +50,32 @@ interface HotelCardType {
   avgRating: number
   reviewCount: number
   pricePerHour: number | null
+  selectedSlotPrice: number | null
+  price3h: number | null
+  price6h: number | null
+  price12h: number | null
   priceFullDay: number | null
 }
+
+  const hotelLinkQuery = new URLSearchParams(searchParams).toString()
+  const slotLabel = searchParams.slot === 'H6'
+    ? '6-hour slot'
+    : searchParams.slot === 'H12'
+      ? '12-hour slot'
+      : searchParams.slot === 'FULLDAY'
+        ? 'Full day'
+        : '3-hour slot'
 
   return (
     <div>
       <p className="text-sm text-gray-500 mb-6">{hotels.length} hotel{hotels.length !== 1 ? 's' : ''} found{searchParams.city ? ` in ${searchParams.city}` : ''}</p>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {(hotels as HotelCardType[]).map((hotel) => (
-          <Link key={hotel.id} href={`/hotels/${hotel.id}`} className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-md transition-shadow">
+          <Link
+            key={hotel.id}
+            href={`/hotels/${hotel.id}${hotelLinkQuery ? `?${hotelLinkQuery}` : ''}`}
+            className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-md transition-shadow"
+          >
             <div className="relative aspect-[16/10] bg-gray-100 overflow-hidden">
               {hotel.image
                 ? <Image src={hotel.image} alt={hotel.name} fill style={{ objectFit: 'cover' }} />
@@ -65,8 +87,8 @@ interface HotelCardType {
               <p className="text-sm text-gray-500 mb-2">{hotel.city}, {hotel.state}</p>
               {hotel.avgRating > 0 && <StarRating rating={hotel.avgRating} />}
               <div className="mt-3 flex items-baseline justify-between">
-                {hotel.pricePerHour && <span className="text-indigo-600 font-semibold">₹{hotel.pricePerHour}<span className="text-xs text-gray-400 font-normal">/hr</span></span>}
-                {hotel.priceFullDay && <span className="text-gray-500 text-sm">₹{hotel.priceFullDay}/day</span>}
+                {hotel.selectedSlotPrice && <span className="text-indigo-600 font-semibold">₹{hotel.selectedSlotPrice}<span className="text-xs text-gray-400 font-normal"> {slotLabel}</span></span>}
+                {hotel.priceFullDay && <span className="text-gray-500 text-sm">₹{hotel.priceFullDay} full day</span>}
               </div>
             </div>
           </Link>

@@ -34,9 +34,9 @@ export async function GET(req: NextRequest) {
         reviews: { select: { rating: true } },
         rooms: {
           where: { isActive: true },
-          select: { id: true, pricePerHour: true, priceFullDay: true },
+          select: { id: true, pricePerHour: true, price_3h: true, price_6h: true, price_12h: true, priceFullDay: true },
           take: 1,
-          orderBy: { pricePerHour: 'asc' },
+          orderBy: { price_3h: 'asc' },
         },
       },
       skip,
@@ -87,6 +87,13 @@ export async function GET(req: NextRequest) {
     }
 
     const result = filteredHotels.map(hotel => ({
+      selectedSlotPrice: slotType === 'H6'
+        ? hotel.rooms[0]?.price_6h || null
+        : slotType === 'H12'
+          ? hotel.rooms[0]?.price_12h || null
+          : slotType === 'FULLDAY'
+            ? hotel.rooms[0]?.priceFullDay || null
+            : hotel.rooms[0]?.price_3h || null,
       id: hotel.id,
       name: hotel.name,
       city: hotel.city,
@@ -100,6 +107,9 @@ export async function GET(req: NextRequest) {
           : 0,
       reviewCount: hotel.reviews.length,
       pricePerHour: hotel.rooms[0]?.pricePerHour || null,
+      price3h: hotel.rooms[0]?.price_3h || null,
+      price6h: hotel.rooms[0]?.price_6h || null,
+      price12h: hotel.rooms[0]?.price_12h || null,
       priceFullDay: hotel.rooms[0]?.priceFullDay || null,
     }))
 
