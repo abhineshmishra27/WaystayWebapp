@@ -143,7 +143,7 @@ Create `.env.local` for local development. Do not commit real secrets.
 ```env
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE"
 
-NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_URL="http://localhost:3001"
 NEXTAUTH_SECRET="replace-with-a-long-random-secret"
 AUTH_SECRET="replace-with-a-long-random-secret"
 
@@ -188,7 +188,7 @@ npm run dev
 Open:
 
 ```text
-http://localhost:3000
+http://localhost:3001
 ```
 
 ## Scripts
