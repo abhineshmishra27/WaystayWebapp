@@ -195,6 +195,10 @@ export async function POST(req: NextRequest) {
           amount: Math.round(booking.totalAmount * 100),
           currency: 'INR',
           receipt: booking.id.slice(-20),
+          notes: {
+            bookingId: booking.id,
+            customerId: session.user.id,
+          },
         })
       } catch (error) {
         console.error('Razorpay order error:', error)

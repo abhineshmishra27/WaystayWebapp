@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import toast, { Toaster } from 'react-hot-toast'
 
@@ -27,6 +27,17 @@ interface RazorpayOptions {
 
 interface RazorpayInstance {
   open: () => void
+  on: (event: 'payment.failed', handler: (response: RazorpayFailureResponse) => void) => void
+}
+
+interface RazorpayFailureResponse {
+  error?: {
+    description?: string
+    metadata?: {
+      payment_id?: string
+      order_id?: string
+    }
+  }
 }
 
 declare global {
@@ -48,6 +59,7 @@ function PaymentDetails() {
   const [loading, setLoading] = useState(false)
   const [onlineLoading, setOnlineLoading] = useState(false)
   const [checkoutReady, setCheckoutReady] = useState(() => typeof window !== 'undefined' && Boolean(window.Razorpay))
+  const paymentCallbackStarted = useRef(false)
 
   const slotId = queryParams.get('slotId') ?? ''
   const hotelId = queryParams.get('hotelId') ?? ''
@@ -63,6 +75,22 @@ function PaymentDetails() {
   const isMissingBooking = !slotId || !startDate || !slotType || !price || !guestName || !guestEmail || !guestPhone
   const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || ''
   const isGatewayConfigured = razorpayKey.startsWith('rzp_')
+
+  const releasePendingBooking = async (
+    bookingId: string,
+    razorpayOrderId: string,
+    razorpayPaymentId?: string
+  ) => {
+    try {
+      await fetch('/api/payments/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, razorpayOrderId, razorpayPaymentId }),
+      })
+    } catch (error) {
+      console.error('Unable to release pending booking:', error)
+    }
+  }
 
   useEffect(() => {
     if (window.Razorpay) {
@@ -146,6 +174,7 @@ function PaymentDetails() {
       })
       const bookingData = await bookingRes.json()
       if (!bookingRes.ok) throw new Error(bookingData.error || 'Failed to start payment')
+      paymentCallbackStarted.current = false
 
       const checkout = new window.Razorpay({
         key: razorpayKey,
@@ -167,11 +196,15 @@ function PaymentDetails() {
         theme: { color: '#4f46e5' },
         modal: {
           ondismiss: () => {
+            if (!paymentCallbackStarted.current) {
+              void releasePendingBooking(bookingData.bookingId, bookingData.razorpayOrderId)
+            }
             setOnlineLoading(false)
-            toast.error('Payment was not completed')
+            if (!paymentCallbackStarted.current) toast.error('Payment was not completed')
           },
         },
         handler: async (response) => {
+          paymentCallbackStarted.current = true
           try {
             const verifyRes = await fetch('/api/payments/verify', {
               method: 'POST',
@@ -193,6 +226,16 @@ function PaymentDetails() {
         },
       })
 
+      checkout.on('payment.failed', (response) => {
+        paymentCallbackStarted.current = true
+        void releasePendingBooking(
+          bookingData.bookingId,
+          bookingData.razorpayOrderId,
+          response.error?.metadata?.payment_id
+        )
+        setOnlineLoading(false)
+        toast.error(response.error?.description || 'Payment failed. Please try another method.')
+      })
       checkout.open()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to start payment')
@@ -209,7 +252,7 @@ function PaymentDetails() {
             <p className="text-sm font-medium text-indigo-600">Payment</p>
             <h1 className="text-2xl font-semibold text-gray-900 mt-1">Choose how to pay</h1>
             <p className="text-sm text-gray-500 mt-2">
-              For testing, use Pay at hotel to confirm the booking without online payment.
+              Pay securely online or reserve now and pay directly at the hotel.
             </p>
           </div>
 

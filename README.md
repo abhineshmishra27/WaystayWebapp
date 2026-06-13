@@ -254,6 +254,27 @@ Before deploying:
 - Configure Resend sender/domain verification.
 - Configure Cloudinary upload credentials.
 
+### Razorpay Setup
+
+Create API keys in the Razorpay Dashboard and configure these variables locally and in the hosting platform:
+
+```env
+RAZORPAY_KEY_ID="rzp_test_..."
+RAZORPAY_KEY_SECRET="..."
+NEXT_PUBLIC_RAZORPAY_KEY_ID="rzp_test_..."
+RAZORPAY_WEBHOOK_SECRET="..."
+```
+
+`RAZORPAY_KEY_ID` and `NEXT_PUBLIC_RAZORPAY_KEY_ID` must contain the same key ID. Never expose `RAZORPAY_KEY_SECRET` or `RAZORPAY_WEBHOOK_SECRET` through a `NEXT_PUBLIC_` variable.
+
+Create a Razorpay webhook pointing to:
+
+```text
+https://YOUR_DOMAIN/api/payments/webhook
+```
+
+Subscribe it to `payment.captured`, `payment.failed`, and `order.paid`, and use the same webhook secret in the dashboard and `RAZORPAY_WEBHOOK_SECRET`. Test mode keys begin with `rzp_test_`; live keys begin with `rzp_live_`.
+
 ## Current Implementation Notes
 
 - Multi-day booking is implemented for full-day slots.

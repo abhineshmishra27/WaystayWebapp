@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/db'
 import { rateLimit } from '@/lib/rate-limit'
 import { sendBookingConfirmation } from '@/lib/email'
-import crypto from 'crypto'
+import { finalizeRazorpayPayment, getPendingRazorpayBooking } from '@/lib/payments'
+import { validatePaymentVerification } from 'razorpay/dist/utils/razorpay-utils'
 import { z } from 'zod'
 
 const schema = z.object({
@@ -37,32 +37,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Payment gateway credentials are not configured' }, { status: 503 })
     }
 
-    const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET as string)
-      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-      .digest('hex')
+    const booking = await getPendingRazorpayBooking(bookingId, session.user.id)
+    if (!booking?.payment) {
+      return NextResponse.json({ error: 'Payment record not found' }, { status: 404 })
+    }
+    if (booking.payment.providerOrderId !== razorpayOrderId) {
+      return NextResponse.json({ error: 'Payment order does not match this booking' }, { status: 400 })
+    }
 
-    if (expectedSignature !== razorpaySignature) {
+    const signatureValid = validatePaymentVerification(
+      { order_id: booking.payment.providerOrderId, payment_id: razorpayPaymentId },
+      razorpaySignature,
+      process.env.RAZORPAY_KEY_SECRET as string
+    )
+    if (!signatureValid) {
       return NextResponse.json({ error: 'Invalid payment signature' }, { status: 400 })
     }
 
-    await prisma.$transaction([
-      prisma.payment.update({
-        where: { bookingId },
-        data: { providerPaymentId: razorpayPaymentId, status: 'SUCCESS' },
-      }),
-      prisma.booking.update({
-        where: { id: bookingId },
-        data: { status: 'CONFIRMED' },
-      }),
-    ])
+    const result = await finalizeRazorpayPayment({
+      bookingId,
+      orderId: razorpayOrderId,
+      paymentId: razorpayPaymentId,
+      customerId: session.user.id,
+    })
 
     try {
-      const booking = await prisma.booking.findUnique({
-        where: { id: bookingId },
-        include: { roomSlot: { include: { room: { include: { hotel: true } } } } },
-      })
-      if (booking) await sendBookingConfirmation(booking)
+      if (result.newlyConfirmed) await sendBookingConfirmation(result.booking)
     } catch (emailErr) {
       console.error('Email error (non-blocking):', emailErr)
     }
@@ -70,6 +70,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, bookingId })
   } catch (error) {
     console.error('Payment verify error:', error)
+    if (
+      error instanceof Error &&
+      [
+        'Payment record not found',
+        'Payment order does not match this booking',
+        'Payment order mismatch',
+        'Payment amount mismatch',
+        'Payment currency mismatch',
+        'Payment has not been captured',
+      ].includes(error.message)
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     return NextResponse.json({ error: 'Payment verification failed' }, { status: 500 })
   }
 }
