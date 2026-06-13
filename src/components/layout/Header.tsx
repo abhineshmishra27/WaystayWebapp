@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { useEffect, useRef, useState } from 'react'
@@ -58,7 +59,17 @@ export default function Header() {
   return (
     <header className="bg-white/95 backdrop-blur border-b border-gray-100 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-        <Link href="/" className="font-bold text-xl text-indigo-600 shrink-0">WayStayy</Link>
+        <Link href="/" className="flex items-center gap-2 font-bold text-xl text-indigo-600 shrink-0">
+          <Image
+            src="/waystayy-icon.png"
+            alt=""
+            width={40}
+            height={40}
+            priority
+            className="h-10 w-10 rounded-xl object-cover"
+          />
+          <span>WayStayy</span>
+        </Link>
 
         <nav className="flex items-center gap-1 rounded-xl bg-gray-50 border border-gray-100 p-1 overflow-x-auto">
           <Link

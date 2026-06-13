@@ -17,6 +17,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'WayStayy — Book hotels by the hour',
   description: 'Find and book hotel rooms by 3 hours, 6 hours, 12 hours, or full day',
+  icons: {
+    icon: '/waystayy-icon.png',
+    apple: '/waystayy-icon.png',
+  },
 }
 
 export default function RootLayout({
