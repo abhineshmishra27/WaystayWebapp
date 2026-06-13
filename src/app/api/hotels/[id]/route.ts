@@ -25,7 +25,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         },
         _count: { select: { reviews: true } },
         restaurant: { include: { menuItems: { where: { isAvailable: true }, orderBy: { category: 'asc' } } } },
-        owner: { select: { name: true } },
       },
     })
 

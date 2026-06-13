@@ -180,7 +180,6 @@ export default async function HotelDetailPage({
             <div className="space-y-2 text-sm text-gray-600">
               <div className="flex justify-between"><span>Check-in</span><span className="font-medium">{hotel.checkInTime}</span></div>
               <div className="flex justify-between"><span>Check-out</span><span className="font-medium">{hotel.checkOutTime}</span></div>
-              <div className="flex justify-between"><span>Owner</span><span className="font-medium">{hotel.owner.name}</span></div>
             </div>
           </div>
         </div>
