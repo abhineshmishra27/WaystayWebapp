@@ -275,6 +275,24 @@ https://YOUR_DOMAIN/api/payments/webhook
 
 Subscribe it to `payment.captured`, `payment.failed`, and `order.paid`, and use the same webhook secret in the dashboard and `RAZORPAY_WEBHOOK_SECRET`. Test mode keys begin with `rzp_test_`; live keys begin with `rzp_live_`.
 
+### Google Sign-In Setup
+
+Create an OAuth 2.0 Web application in Google Cloud Console and configure:
+
+```env
+AUTH_GOOGLE_ID="..."
+AUTH_GOOGLE_SECRET="..."
+```
+
+Add these authorized redirect URIs:
+
+```text
+http://localhost:3001/api/auth/callback/google
+https://YOUR_DOMAIN/api/auth/callback/google
+```
+
+The Google button appears only when both environment variables are configured. New Google users are created as customers. Existing users with the same verified Google email are linked to their current WayStayy role and profile.
+
 ## Current Implementation Notes
 
 - Multi-day booking is implemented for full-day slots.

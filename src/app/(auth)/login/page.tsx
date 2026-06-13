@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react'
-import { signIn } from 'next-auth/react'
+import { useEffect, useState } from 'react'
+import { getProviders, signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useForm } from 'react-hook-form'
@@ -17,12 +17,22 @@ type FormData = z.infer<typeof schema>
 export default function LoginPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const [googleEnabled, setGoogleEnabled] = useState(false)
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) })
 
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const registered = searchParams.get('registered') === 'true' || searchParams.has('registered')
   const unauthorized = searchParams.get('error') === 'unauthorized'
+  const authError = searchParams.get('error')
   const returnTo = searchParams.get('returnTo')
+  const redirectTo = returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/hotels'
+
+  useEffect(() => {
+    getProviders()
+      .then(providers => setGoogleEnabled(Boolean(providers?.google)))
+      .catch(() => setGoogleEnabled(false))
+  }, [])
 
   const onSubmit = async (data: FormData) => {
     setLoading(true)
@@ -32,12 +42,12 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    if (returnTo?.startsWith('/') && !returnTo.startsWith('//')) {
-      router.push(returnTo)
-      return
-    }
+    router.push(redirectTo)
+  }
 
-    router.push('/hotels')
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true)
+    await signIn('google', { redirectTo })
   }
 
   return (
@@ -56,6 +66,35 @@ export default function LoginPage() {
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">
             You do not have permission to access that page.
           </div>
+        )}
+        {authError && authError !== 'unauthorized' && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">
+            Google sign-in could not be completed. Please try again or use your password.
+          </div>
+        )}
+
+        {googleEnabled && (
+          <>
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={googleLoading || loading}
+              className="w-full border border-gray-200 bg-white text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-3"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5">
+                <path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3Z" />
+                <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1a5.8 5.8 0 0 1-5.5-4H3.2v2.6A10 10 0 0 0 12 22Z" />
+                <path fill="#FBBC05" d="M6.5 14a6 6 0 0 1 0-4V7.4H3.2a10 10 0 0 0 0 9.2L6.5 14Z" />
+                <path fill="#EA4335" d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.9-2.9A9.7 9.7 0 0 0 3.2 7.4L6.5 10A5.8 5.8 0 0 1 12 6Z" />
+              </svg>
+              {googleLoading ? 'Connecting to Google...' : 'Continue with Google'}
+            </button>
+            <div className="my-5 flex items-center gap-3">
+              <div className="h-px flex-1 bg-gray-200" />
+              <span className="text-xs uppercase tracking-wide text-gray-400">or</span>
+              <div className="h-px flex-1 bg-gray-200" />
+            </div>
+          </>
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

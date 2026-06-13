@@ -1,8 +1,10 @@
 import NextAuth from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
+import GoogleProvider from 'next-auth/providers/google'
 import type { Role } from '@prisma/client'
 
 const ROLES: readonly Role[] = ['ADMIN', 'OWNER', 'CUSTOMER']
+const googleAuthEnabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET)
 
 function isRole(value: unknown): value is Role {
   return typeof value === 'string' && ROLES.includes(value as Role)
@@ -46,12 +48,71 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       },
     }),
+    ...(googleAuthEnabled
+      ? [
+          GoogleProvider({
+            clientId: process.env.AUTH_GOOGLE_ID as string,
+            clientSecret: process.env.AUTH_GOOGLE_SECRET as string,
+          }),
+        ]
+      : []),
   ],
   callbacks: {
-    jwt({ token, user, trigger, session }) {
+    async signIn({ user, account, profile }) {
+      if (account?.provider !== 'google') return true
+      if (!user.email || profile?.email_verified !== true) return false
+
+      const { prisma } = await import('@/lib/db')
+      const existingUser = await prisma.user.findUnique({
+        where: { email: user.email },
+      })
+
+      if (existingUser && !existingUser.isActive) return false
+
+      if (existingUser) {
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            avatarUrl: existingUser.avatarUrl ?? user.image,
+          },
+        })
+        return true
+      }
+
+      const bcrypt = (await import('bcryptjs')).default
+      const passwordHash = await bcrypt.hash(
+        `${globalThis.crypto.randomUUID()}${globalThis.crypto.randomUUID()}`,
+        12
+      )
+
+      await prisma.user.create({
+        data: {
+          email: user.email,
+          name: user.name || user.email.split('@')[0],
+          passwordHash,
+          role: 'CUSTOMER',
+          avatarUrl: user.image,
+        },
+      })
+      return true
+    },
+    async jwt({ token, user, account, trigger, session }) {
+      if (account?.provider === 'google' && token.email) {
+        const { prisma } = await import('@/lib/db')
+        const localUser = await prisma.user.findUnique({
+          where: { email: token.email },
+          select: { id: true, role: true, avatarUrl: true, isActive: true },
+        })
+
+        if (localUser?.isActive) {
+          token.sub = localUser.id
+          token.role = localUser.role
+          token.avatarUrl = localUser.avatarUrl
+        }
+      }
       if (user) {
-        token.role = user.role
-        token.avatarUrl = user.avatarUrl ?? null
+        if (isRole(user.role)) token.role = user.role
+        if ('avatarUrl' in user) token.avatarUrl = user.avatarUrl ?? null
       }
       if (trigger === 'update' && session?.user) {
         if (typeof session.user.name === 'string') token.name = session.user.name
