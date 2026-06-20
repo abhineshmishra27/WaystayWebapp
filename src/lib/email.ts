@@ -1,14 +1,31 @@
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM = 'WayStayy <noreply@waystayy.com>'
+type EmailPayload = Parameters<Resend['emails']['send']>[0]
+
+function getResend() {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return null
+
+  return new Resend(apiKey)
+}
+
+async function sendEmail(payload: EmailPayload) {
+  const resend = getResend()
+  if (!resend) {
+    console.warn('Skipping email: RESEND_API_KEY is not configured')
+    return
+  }
+
+  await resend.emails.send(payload)
+}
 
 function formatDate(d: Date | string) {
   return new Date(d).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 export async function sendWelcomeEmail(email: string, name: string) {
-  await resend.emails.send({
+  await sendEmail({
     from: FROM, to: email,
     subject: `Welcome to WayStayy, ${name}!`,
     html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
@@ -40,7 +57,7 @@ interface BookingEmailData {
 export async function sendBookingConfirmation(booking: BookingEmailData) {
   const hotel = booking.roomSlot?.room?.hotel
   const room = booking.roomSlot?.room
-  await resend.emails.send({
+  await sendEmail({
     from: FROM, to: booking.guestEmail,
     subject: `Booking Confirmed — ${hotel?.name || 'WayStayy'}`,
     html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
@@ -63,7 +80,7 @@ export async function sendBookingCancellation(
   booking: BookingEmailData,
   refundAmount?: number
 ) {
-  await resend.emails.send({
+  await sendEmail({
     from: FROM, to: booking.guestEmail,
     subject: `Booking Cancelled — Refund Initiated`,
     html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
@@ -75,7 +92,7 @@ export async function sendBookingCancellation(
 }
 
 export async function sendHotelStatusEmail(email: string, ownerName: string, hotelName: string, approved: boolean, reason?: string) {
-  await resend.emails.send({
+  await sendEmail({
     from: FROM, to: email,
     subject: approved ? `✅ ${hotelName} is now live on WayStayy` : `Update on your hotel listing`,
     html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
@@ -95,7 +112,7 @@ interface ReviewNudgeData {
 }
 
 export async function sendReviewNudge(booking: ReviewNudgeData, hotelName: string) {
-  await resend.emails.send({
+  await sendEmail({
     from: FROM, to: booking.guestEmail,
     subject: `How was your stay at ${hotelName}?`,
     html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
