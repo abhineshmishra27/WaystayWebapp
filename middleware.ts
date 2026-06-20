@@ -1,40 +1,40 @@
-import { auth } from '@/lib/auth'
+import { getToken } from 'next-auth/jwt'
+import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 
-export default auth((req) => {
+export default async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl
-  const role = req.auth?.user?.role as string | undefined
+  const token = await getToken({
+    req,
+    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  })
+  const role = typeof token?.role === 'string' ? token.role : undefined
   const returnTo = `${pathname}${search}`
 
-  // Admin routes — only ADMIN
   if (pathname.startsWith('/admin')) {
     if (!role || role !== 'ADMIN') {
       return NextResponse.redirect(new URL('/login?error=unauthorized', req.url))
     }
   }
 
-  // Owner routes — only OWNER
   if (pathname.startsWith('/owner')) {
     if (!role || role !== 'OWNER') {
       return NextResponse.redirect(new URL('/login?error=unauthorized', req.url))
     }
   }
 
-  // Customer dashboard — any logged-in user
   if (pathname.startsWith('/dashboard')) {
     if (!role) {
       return NextResponse.redirect(new URL(`/login?returnTo=${encodeURIComponent(returnTo)}`, req.url))
     }
   }
 
-  // Booking page — must be logged in
   if (pathname.startsWith('/booking')) {
     if (!role) {
       return NextResponse.redirect(new URL(`/login?returnTo=${encodeURIComponent(returnTo)}`, req.url))
     }
   }
 
-  // Payment page — must be logged in
   if (pathname.startsWith('/payment')) {
     if (!role) {
       return NextResponse.redirect(new URL(`/login?returnTo=${encodeURIComponent(returnTo)}`, req.url))
@@ -42,7 +42,7 @@ export default auth((req) => {
   }
 
   return NextResponse.next()
-})
+}
 
 export const config = {
   matcher: [
