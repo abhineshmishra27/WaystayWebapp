@@ -39,7 +39,7 @@ export default function RegisterPage() {
       setLoading(false)
       return
     }
-    router.push('/login?registered=true')
+    router.push('/')
   }
 
   const fields = [
