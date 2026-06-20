@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { razorpay } from '@/lib/razorpay'
+import { getRazorpay } from '@/lib/razorpay'
 
 function dateRange(start: Date, end: Date) {
   const dates: string[] = []
@@ -57,6 +57,7 @@ export async function finalizeRazorpayPayment({
 
   let updated = false
   if (!alreadyConfirmed) {
+    const razorpay = getRazorpay()
     const payment = await razorpay.payments.fetch(paymentId)
     const expectedAmount = Math.round(booking.payment.amount * 100)
 

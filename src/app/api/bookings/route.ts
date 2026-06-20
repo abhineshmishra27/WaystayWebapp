@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { rateLimit } from '@/lib/rate-limit'
-import { razorpay } from '@/lib/razorpay'
+import { getRazorpay } from '@/lib/razorpay'
 import { sendBookingConfirmation } from '@/lib/email'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
@@ -191,6 +191,7 @@ export async function POST(req: NextRequest) {
       // Create Razorpay order
       let order: { id: string }
       try {
+        const razorpay = getRazorpay()
         order = await razorpay.orders.create({
           amount: Math.round(booking.totalAmount * 100),
           currency: 'INR',

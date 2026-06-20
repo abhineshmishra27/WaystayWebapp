@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { razorpay } from '@/lib/razorpay'
+import { getRazorpay } from '@/lib/razorpay'
 import { sendBookingCancellation } from '@/lib/email'
 
 function dateRange(start: Date, end: Date) {
@@ -44,6 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     let refundAmount: number | undefined
     if (booking.payment?.status === 'SUCCESS' && booking.payment.providerPaymentId) {
       try {
+        const razorpay = getRazorpay()
         await razorpay.payments.refund(booking.payment.providerPaymentId, {
           amount: Math.round(booking.totalAmount * 100),
         })
