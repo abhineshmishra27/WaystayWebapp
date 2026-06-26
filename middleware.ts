@@ -1,14 +1,11 @@
-import { getToken } from 'next-auth/jwt'
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
 
-export default async function middleware(req: NextRequest) {
+async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl
-  const token = await getToken({
-    req,
-    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
-  })
-  const role = typeof token?.role === 'string' ? token.role : undefined
+  const session = await auth()
+  const role = session?.user?.role
   const returnTo = `${pathname}${search}`
 
   if (pathname.startsWith('/admin')) {
@@ -43,6 +40,8 @@ export default async function middleware(req: NextRequest) {
 
   return NextResponse.next()
 }
+
+export default middleware
 
 export const config = {
   matcher: [

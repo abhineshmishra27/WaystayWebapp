@@ -42,7 +42,8 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    router.push(redirectTo)
+    router.replace(redirectTo)
+    router.refresh()
   }
 
   const handleGoogleSignIn = async () => {
@@ -134,12 +135,6 @@ export default function LoginPage() {
           <Link href="/register" className="text-indigo-600 hover:underline font-medium">Create one</Link>
         </p>
 
-        <div className="mt-6 p-3 bg-gray-50 rounded-lg text-xs text-gray-400">
-          <p>Demo credentials:</p>
-          <p>Admin: admin@waystayy.com / Admin@123</p>
-          <p>Owner: owner@demo.com / Owner@123</p>
-          <p>Customer: customer@demo.com / Cust@123</p>
-        </div>
       </div>
     </div>
   )
