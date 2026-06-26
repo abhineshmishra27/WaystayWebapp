@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSession } from 'next-auth/react'
 
 const SLOT_LABELS: Record<string, string> = { H3: '3 Hours', H6: '6 Hours', H12: '12 Hours', FULLDAY: 'Full Day' }
 type SlotType = 'H3' | 'H6' | 'H12' | 'FULLDAY'
@@ -55,7 +54,6 @@ export default function SlotPicker({
   initialEndDate?: string
 }) {
   const router = useRouter()
-  const { status } = useSession()
   const today = getTodayDateString()
   const initialSafeStartDate = clampToToday(initialStartDate, today)
   const initialSafeEndDate = clampToToday(initialEndDate || initialStartDate, today)
@@ -116,11 +114,6 @@ export default function SlotPicker({
     })
     const bookingUrl = `/booking?${params.toString()}`
 
-    if (status === 'unauthenticated') {
-      router.push(`/login?returnTo=${encodeURIComponent(bookingUrl)}`)
-      return
-    }
-
     router.push(bookingUrl)
   }
 
@@ -177,7 +170,7 @@ export default function SlotPicker({
             <button
               key={slot.id}
               type="button"
-              disabled={slot.isBooked || status === 'loading'}
+              disabled={slot.isBooked}
               onClick={() => handleSlotSelect(slot)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${slot.isBooked ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'}`}
             >

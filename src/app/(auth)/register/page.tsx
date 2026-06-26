@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { signIn } from 'next-auth/react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -21,6 +22,9 @@ type FormData = z.infer<typeof schema>
 export default function RegisterPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
+  const returnTo = searchParams.get('returnTo')
+  const redirectTo = returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/'
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { role: 'CUSTOMER' },
@@ -39,7 +43,22 @@ export default function RegisterPage() {
       setLoading(false)
       return
     }
-    router.push('/')
+
+    const signInResult = await signIn('credentials', {
+      email: data.email,
+      password: data.password,
+      redirect: false,
+    })
+
+    if (signInResult?.error) {
+      toast.success('Account created. Please sign in.')
+      router.replace(`/login?returnTo=${encodeURIComponent(redirectTo)}`)
+      router.refresh()
+      return
+    }
+
+    router.replace(redirectTo)
+    router.refresh()
   }
 
   const fields = [

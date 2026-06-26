@@ -27,6 +27,9 @@ export default function LoginPage() {
   const authError = searchParams.get('error')
   const returnTo = searchParams.get('returnTo')
   const redirectTo = returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/hotels'
+  const registerHref = returnTo
+    ? `/register?returnTo=${encodeURIComponent(redirectTo)}`
+    : '/register'
 
   useEffect(() => {
     getProviders()
@@ -132,7 +135,7 @@ export default function LoginPage() {
 
         <p className="text-center text-sm text-gray-500 mt-4">
           No account?{' '}
-          <Link href="/register" className="text-indigo-600 hover:underline font-medium">Create one</Link>
+          <Link href={registerHref} className="text-indigo-600 hover:underline font-medium">Create one</Link>
         </p>
 
       </div>
