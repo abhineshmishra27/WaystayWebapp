@@ -26,6 +26,8 @@ export default async function HotelsPage({ searchParams }: { searchParams: Promi
             initialStartDate={normalizedSearchParams.startDate}
             initialEndDate={normalizedSearchParams.endDate}
             initialSlot={normalizedSearchParams.slot}
+            initialGuestCount={normalizedSearchParams.guestCount}
+            initialRoomCount={normalizedSearchParams.roomCount}
           />
         </div>
       </div>

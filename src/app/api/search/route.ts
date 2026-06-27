@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     const startDate = searchParams.get('startDate') ?? date
     const endDate = searchParams.get('endDate') ?? startDate
     const slotType = (searchParams.get('slot') as 'H3' | 'H6' | 'H12' | 'FULLDAY' | null)
+    const roomCount = Math.max(1, Math.min(10, parseInt(searchParams.get('roomCount') || '1', 10) || 1))
 
     if (searchParams.get('lat') && (isNaN(lat) || lat < -90 || lat > 90)) {
       return NextResponse.json({ error: 'Invalid lat' }, { status: 400 })
@@ -86,14 +87,17 @@ export async function GET(req: NextRequest) {
       filteredHotels = hotels.filter(hotel => availableHotelIds.includes(hotel.id))
     }
 
-    const result = filteredHotels.map(hotel => ({
-      selectedSlotPrice: slotType === 'H6'
+    const result = filteredHotels.map(hotel => {
+      const selectedSlotPrice = slotType === 'H6'
         ? hotel.rooms[0]?.price_6h || null
         : slotType === 'H12'
           ? hotel.rooms[0]?.price_12h || null
           : slotType === 'FULLDAY'
             ? hotel.rooms[0]?.priceFullDay || null
-            : hotel.rooms[0]?.price_3h || null,
+            : hotel.rooms[0]?.price_3h || null
+
+      return {
+      selectedSlotPrice: selectedSlotPrice ? selectedSlotPrice * roomCount : null,
       id: hotel.id,
       name: hotel.name,
       city: hotel.city,
@@ -111,7 +115,8 @@ export async function GET(req: NextRequest) {
       price6h: hotel.rooms[0]?.price_6h || null,
       price12h: hotel.rooms[0]?.price_12h || null,
       priceFullDay: hotel.rooms[0]?.priceFullDay || null,
-    }))
+    }
+    })
 
     return NextResponse.json({ hotels: result, count: result.length, page })
   } catch (error) {

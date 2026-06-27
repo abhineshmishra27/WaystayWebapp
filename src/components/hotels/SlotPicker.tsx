@@ -25,6 +25,11 @@ function clampToToday(date: string | undefined, today: string) {
   return date && date >= today ? date : today
 }
 
+function positiveInt(value: string | undefined, fallback: number) {
+  const parsed = parseInt(value || '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
 interface SlotOption {
   id: string
   startTime: string
@@ -44,6 +49,8 @@ export default function SlotPicker({
   initialSlotType = 'H3',
   initialStartDate,
   initialEndDate,
+  initialGuestCount,
+  initialRoomCount,
 }: {
   roomId: string
   price3h: number
@@ -55,6 +62,8 @@ export default function SlotPicker({
   initialSlotType?: SlotType
   initialStartDate?: string
   initialEndDate?: string
+  initialGuestCount?: string
+  initialRoomCount?: string
 }) {
   const router = useRouter()
   const today = getTodayDateString()
@@ -65,9 +74,9 @@ export default function SlotPicker({
   const [activeTab, setActiveTab] = useState<SlotType>(initialSlotType)
   const [availability, setAvailability] = useState<Record<string, SlotOption[]>>({})
   const [loading, setLoading] = useState(false)
-  const [guestCount, setGuestCount] = useState(1)
-  const [roomCount, setRoomCount] = useState(1)
   const guestsPerRoomLimit = Math.max(1, Math.min(maxGuestsPerRoom, DEFAULT_MAX_GUESTS_PER_ROOM))
+  const [guestCount, setGuestCount] = useState(positiveInt(initialGuestCount, 1))
+  const [roomCount, setRoomCount] = useState(Math.max(positiveInt(initialRoomCount, 1), Math.ceil(positiveInt(initialGuestCount, 1) / guestsPerRoomLimit)))
   const requiredRooms = Math.max(1, Math.ceil(guestCount / guestsPerRoomLimit))
 
   useEffect(() => {
@@ -169,28 +178,22 @@ export default function SlotPicker({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-        <label className="text-sm text-gray-600">
+        <div className="text-sm text-gray-600">
           <span className="block mb-1">Guests</span>
-          <input
-            type="number"
-            min={1}
-            max={30}
-            value={guestCount}
-            onChange={e => updateGuestCount(Number(e.target.value))}
-            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
-          />
-        </label>
-        <label className="text-sm text-gray-600">
+          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-2 py-1.5">
+            <button type="button" onClick={() => updateGuestCount(guestCount - 1)} className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50" aria-label="Decrease guests">-</button>
+            <span className="font-medium text-gray-800">{guestCount}</span>
+            <button type="button" onClick={() => updateGuestCount(guestCount + 1)} className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50" aria-label="Increase guests">+</button>
+          </div>
+        </div>
+        <div className="text-sm text-gray-600">
           <span className="block mb-1">Rooms</span>
-          <input
-            type="number"
-            min={requiredRooms}
-            max={10}
-            value={roomCount}
-            onChange={e => updateRoomCount(Number(e.target.value))}
-            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
-          />
-        </label>
+          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-2 py-1.5">
+            <button type="button" onClick={() => updateRoomCount(roomCount - 1)} disabled={roomCount <= requiredRooms} className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40" aria-label="Decrease rooms">-</button>
+            <span className="font-medium text-gray-800">{roomCount}</span>
+            <button type="button" onClick={() => updateRoomCount(roomCount + 1)} className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50" aria-label="Increase rooms">+</button>
+          </div>
+        </div>
         <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
           <span className="block font-medium text-gray-700">Max {guestsPerRoomLimit} guests per room</span>
           {requiredRooms > 1 ? `${guestCount} guests need at least ${requiredRooms} rooms.` : 'One room is enough for this group.'}

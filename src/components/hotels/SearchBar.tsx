@@ -10,9 +10,15 @@ const SLOT_OPTIONS = [
 ]
 
 type SlotValue = 'H3' | 'H6' | 'H12' | 'FULLDAY'
+const MAX_GUESTS_PER_ROOM = 3
 
 function normalizeSlot(slot?: string): SlotValue {
   return slot === 'H6' || slot === 'H12' || slot === 'FULLDAY' ? slot : 'H3'
+}
+
+function positiveInt(value: string | undefined, fallback: number) {
+  const parsed = parseInt(value || '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
 export default function SearchBar({
@@ -21,12 +27,16 @@ export default function SearchBar({
   initialStartDate,
   initialEndDate,
   initialSlot,
+  initialGuestCount,
+  initialRoomCount,
 }: {
   className?: string
   initialCity?: string
   initialStartDate?: string
   initialEndDate?: string
   initialSlot?: string
+  initialGuestCount?: string
+  initialRoomCount?: string
 }) {
   const router = useRouter()
   const today = new Date().toISOString().split('T')[0]
@@ -34,6 +44,19 @@ export default function SearchBar({
   const [startDate, setStartDate] = useState(initialStartDate || today)
   const [endDate, setEndDate] = useState(initialEndDate || initialStartDate || today)
   const [slot, setSlot] = useState<SlotValue>(normalizeSlot(initialSlot))
+  const [guestCount, setGuestCount] = useState(positiveInt(initialGuestCount, 1))
+  const [roomCount, setRoomCount] = useState(Math.max(positiveInt(initialRoomCount, 1), Math.ceil(positiveInt(initialGuestCount, 1) / MAX_GUESTS_PER_ROOM)))
+  const requiredRooms = Math.max(1, Math.ceil(guestCount / MAX_GUESTS_PER_ROOM))
+
+  const updateGuestCount = (nextGuests: number) => {
+    const safeGuests = Math.max(1, Math.min(30, nextGuests))
+    setGuestCount(safeGuests)
+    setRoomCount(prev => Math.max(prev, Math.ceil(safeGuests / MAX_GUESTS_PER_ROOM)))
+  }
+
+  const updateRoomCount = (nextRooms: number) => {
+    setRoomCount(Math.max(requiredRooms, Math.min(10, nextRooms)))
+  }
 
   const handleSearch = (next?: Partial<{ city: string; startDate: string; endDate: string; slot: SlotValue }>) => {
     const nextCity = next?.city ?? city
@@ -47,12 +70,14 @@ export default function SearchBar({
       startDate: nextStartDate,
       endDate: nextSlot === 'FULLDAY' ? nextEndDate : nextStartDate,
       slot: nextSlot,
+      guestCount: guestCount.toString(),
+      roomCount: roomCount.toString(),
     })
     router.push('/hotels?' + params.toString())
   }
 
   return (
-    <div className={`bg-white rounded-2xl p-2 flex flex-col md:flex-row gap-2 shadow-lg ${className}`}>
+    <div className={`bg-white rounded-2xl p-2 flex flex-col md:flex-row md:flex-wrap gap-2 shadow-lg ${className}`}>
       <input
         type="text"
         placeholder="City or area (e.g. Bangalore)"
@@ -96,6 +121,51 @@ export default function SearchBar({
           </option>
         ))}
       </select>
+      <div className="flex items-center justify-between gap-3 px-3 py-2 text-gray-800 text-sm rounded-xl border-l border-gray-100 bg-white min-w-44">
+        <span className="text-gray-500">Guests</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => updateGuestCount(guestCount - 1)}
+            className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50"
+            aria-label="Decrease guests"
+          >
+            -
+          </button>
+          <span className="w-5 text-center font-medium">{guestCount}</span>
+          <button
+            type="button"
+            onClick={() => updateGuestCount(guestCount + 1)}
+            className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50"
+            aria-label="Increase guests"
+          >
+            +
+          </button>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-3 px-3 py-2 text-gray-800 text-sm rounded-xl border-l border-gray-100 bg-white min-w-44">
+        <span className="text-gray-500">Rooms</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => updateRoomCount(roomCount - 1)}
+            className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+            aria-label="Decrease rooms"
+            disabled={roomCount <= requiredRooms}
+          >
+            -
+          </button>
+          <span className="w-5 text-center font-medium">{roomCount}</span>
+          <button
+            type="button"
+            onClick={() => updateRoomCount(roomCount + 1)}
+            className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50"
+            aria-label="Increase rooms"
+          >
+            +
+          </button>
+        </div>
+      </div>
       <button
         type="button"
         onClick={() => handleSearch()}

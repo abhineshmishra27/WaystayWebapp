@@ -53,6 +53,8 @@ export default async function HotelDetailPage({
   const selectedSlot = getSelectedSlot(query.slot)
   const initialStartDate = getSearchValue(query.startDate)
   const initialEndDate = getSearchValue(query.endDate)
+  const initialGuestCount = getSearchValue(query.guestCount)
+  const initialRoomCount = getSearchValue(query.roomCount)
   const hotel = await getHotel(id)
   if (!hotel) notFound()
 
@@ -163,6 +165,8 @@ export default async function HotelDetailPage({
                   initialSlotType={selectedSlot}
                   initialStartDate={initialStartDate}
                   initialEndDate={initialEndDate}
+                  initialGuestCount={initialGuestCount}
+                  initialRoomCount={initialRoomCount}
                 />
               </div>
             ))}
