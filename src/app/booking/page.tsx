@@ -23,6 +23,11 @@ const SLOT_LABELS: Record<string, string> = {
   FULLDAY: 'Full Day',
 }
 
+function positiveInt(value: string | null, fallback: number) {
+  const parsed = parseInt(value || '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
 function BookingPreview() {
   const { data: session } = useSession()
   const router = useRouter()
@@ -37,6 +42,9 @@ function BookingPreview() {
   const endTime = queryParams.get('endTime') ?? ''
   const slotType = queryParams.get('slotType') ?? ''
   const price = parseFloat(queryParams.get('price') || '0')
+  const guestCount = positiveInt(queryParams.get('guestCount'), 1)
+  const roomCount = positiveInt(queryParams.get('roomCount'), 1)
+  const maxGuestsPerRoom = positiveInt(queryParams.get('maxGuestsPerRoom'), 3)
 
   const {
     register,
@@ -102,6 +110,9 @@ function BookingPreview() {
       guestName: data.guestName,
       guestEmail: data.guestEmail,
       guestPhone: data.guestPhone,
+      guestCount: guestCount.toString(),
+      roomCount: roomCount.toString(),
+      maxGuestsPerRoom: maxGuestsPerRoom.toString(),
     })
 
     router.push(`/payment?${paymentParams.toString()}`)
@@ -121,6 +132,9 @@ function BookingPreview() {
               <div className="flex justify-between"><span className="text-gray-500">End date</span><span className="font-medium">{endDate}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Duration</span><span className="font-medium">{SLOT_LABELS[slotType] || 'Custom'}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Time</span><span className="font-medium">{startTime} - {endTime}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Guests</span><span className="font-medium">{guestCount}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Rooms</span><span className="font-medium">{roomCount}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Capacity</span><span className="font-medium">{maxGuestsPerRoom} guests/room</span></div>
               <div className="border-t border-gray-100 pt-3 flex justify-between text-base">
                 <span className="font-semibold">Total</span>
                 <span className="font-bold text-indigo-600">₹{price}</span>

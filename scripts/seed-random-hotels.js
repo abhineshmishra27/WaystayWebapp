@@ -185,7 +185,7 @@ async function main() {
           price_9h: template.price9h,
           price_12h: template.price12h,
           priceFullDay: template.fullDay,
-          maxOccupancy: roomIndex < 2 ? 2 : 4,
+          maxOccupancy: 3,
           amenities: ['AC', 'TV', 'WiFi', 'Hot Water', 'Room Service'],
           images: ['https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=1200'],
           isActive: true,

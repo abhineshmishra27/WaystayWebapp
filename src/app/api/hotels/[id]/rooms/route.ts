@@ -13,7 +13,7 @@ const roomSchema = z.object({
   price9h: z.number().positive().optional(),
   price12h: z.number().positive().optional(),
   priceFullDay: z.number().positive(),
-  maxOccupancy: z.number().int().min(1).max(10).default(2),
+  maxOccupancy: z.number().int().min(1).max(3).default(3),
   amenities: z.array(z.string()).default([]),
   images: z.array(z.string().url()).default([]),
   floorNumber: z.number().int().min(0).default(1),

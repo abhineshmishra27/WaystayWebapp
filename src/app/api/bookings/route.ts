@@ -15,6 +15,8 @@ const createBookingSchema = z.object({
   guestName: z.string().min(2),
   guestEmail: z.string().email(),
   guestPhone: z.string().min(10),
+  guestCount: z.number().int().min(1).max(30).default(1),
+  roomCount: z.number().int().min(1).max(10).default(1),
   totalAmount: z.number().positive(),
   paymentMethod: z.enum(['RAZORPAY', 'PAY_AT_HOTEL']).default('RAZORPAY'),
 })
@@ -52,6 +54,18 @@ function isRazorpayConfigured() {
     process.env.RAZORPAY_KEY_SECRET &&
     process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.startsWith('rzp_')
   )
+}
+
+function isBookingConflict(error: Error) {
+  return [
+    'This slot is no longer available',
+    'Invalid booking date range',
+    'Past dates cannot be booked',
+    'Selected slot does not match the booking date',
+    'Multi-day bookings require a full-day slot',
+    'One or more selected dates are no longer available',
+    'Payment gateway authentication failed',
+  ].includes(error.message) || error.message.startsWith('Selected guests require at least')
 }
 
 export async function GET(_req: NextRequest) {
@@ -103,7 +117,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 })
     }
 
-    const { slotId, guestName, guestEmail, guestPhone, startDate, endDate, slotType, paymentMethod } = parsed.data
+    const { slotId, guestName, guestEmail, guestPhone, guestCount, roomCount, startDate, endDate, slotType, paymentMethod } = parsed.data
     if (paymentMethod === 'RAZORPAY' && !isRazorpayConfigured()) {
       return NextResponse.json(
         { error: 'Payment gateway credentials are not configured. Please use Pay at Hotel or add Razorpay test keys.' },
@@ -116,6 +130,11 @@ export async function POST(req: NextRequest) {
       const slot = await tx.roomSlot.findUnique({ where: { id: slotId }, include: { room: true } })
       if (!slot) throw new Error('Slot not found')
       if (slot.isBooked) throw new Error('This slot is no longer available')
+      const maxGuestsPerRoom = Math.max(1, Math.min(slot.room.maxOccupancy, 3))
+      const requiredRooms = Math.ceil(guestCount / maxGuestsPerRoom)
+      if (roomCount < requiredRooms) {
+        throw new Error(`Selected guests require at least ${requiredRooms} room${requiredRooms === 1 ? '' : 's'}`)
+      }
 
       const rangeStart = startDate ?? slot.date
       const rangeEnd = endDate ?? rangeStart
@@ -166,7 +185,7 @@ export async function POST(req: NextRequest) {
         H12: slot.room.price_12h,
         FULLDAY: slot.room.priceFullDay * dates.length,
       }
-      const bookingAmount = slotPrices[slot.slotType as keyof typeof slotPrices]
+      const bookingAmount = slotPrices[slot.slotType as keyof typeof slotPrices] * roomCount
 
       // Create booking
       const booking = await tx.booking.create({
@@ -180,6 +199,8 @@ export async function POST(req: NextRequest) {
           guestName,
           guestEmail,
           guestPhone,
+          guestCount,
+          roomCount,
           status: paymentMethod === 'PAY_AT_HOTEL' ? 'CONFIRMED' : 'PENDING',
         },
       })
@@ -248,18 +269,7 @@ export async function POST(req: NextRequest) {
     }, { status: 201 })
   } catch (err) {
     console.error('Create booking error:', err)
-    if (
-      err instanceof Error &&
-      [
-        'This slot is no longer available',
-        'Invalid booking date range',
-        'Past dates cannot be booked',
-        'Selected slot does not match the booking date',
-        'Multi-day bookings require a full-day slot',
-        'One or more selected dates are no longer available',
-        'Payment gateway authentication failed',
-      ].includes(err.message)
-    ) {
+    if (err instanceof Error && isBookingConflict(err)) {
       return NextResponse.json(
         { error: err.message },
         { status: err.message === 'Payment gateway authentication failed' ? 503 : 409 }

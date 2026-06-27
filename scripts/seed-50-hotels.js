@@ -167,7 +167,7 @@ async function main() {
           price_9h: basePrice + 1500,
           price_12h: basePrice + 2100,
           priceFullDay: basePrice + 2600,
-          maxOccupancy: 2,
+          maxOccupancy: 3,
           amenities: ['AC', 'TV', 'WiFi', 'Hot Water', 'Room Service'],
           images: ['https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=1200'],
           isActive: true,

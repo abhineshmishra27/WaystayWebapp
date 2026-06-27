@@ -118,7 +118,7 @@ export default async function HotelDetailPage({
                       <h3 className="font-semibold text-gray-900">{room.name}</h3>
                       <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{room.type}</span>
                     </div>
-                    <p className="text-sm text-gray-500">{room.description} · Max {room.maxOccupancy} guests</p>
+                    <p className="text-sm text-gray-500">{room.description} · Max {Math.min(room.maxOccupancy, 3)} guests</p>
                   </div>
                   <div className="text-right">
                     <p className="text-indigo-600 font-bold">₹{getSlotPrice(room, selectedSlot)}<span className="text-xs text-gray-400 font-normal"> {getSlotLabel(selectedSlot)}</span></p>
@@ -159,6 +159,7 @@ export default async function HotelDetailPage({
                   price12h={room.price_12h}
                   priceFullDay={room.priceFullDay}
                   hotelId={hotel.id}
+                  maxGuestsPerRoom={Math.min(room.maxOccupancy, 3)}
                   initialSlotType={selectedSlot}
                   initialStartDate={initialStartDate}
                   initialEndDate={initialEndDate}

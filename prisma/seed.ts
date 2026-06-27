@@ -102,7 +102,7 @@ async function main() {
       price_9h: 499,
       price_12h: 999,
       priceFullDay: 1999,
-      maxOccupancy: 2,
+      maxOccupancy: 3,
       amenities: ['AC', 'TV', 'WiFi', 'Hot Water'],
       images: ['https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800'],
       base_clean_video_id: 'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800',

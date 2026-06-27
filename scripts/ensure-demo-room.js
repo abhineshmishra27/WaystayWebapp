@@ -38,7 +38,7 @@ async function main() {
         price_9h: 8000,
         price_12h: 10000,
         priceFullDay: 12000,
-        maxOccupancy: 4,
+        maxOccupancy: 3,
         amenities: ['wifi', 'ac', 'breakfast', 'tv'],
         images: [],
         base_clean_video_id: '',

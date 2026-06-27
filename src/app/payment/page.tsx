@@ -53,6 +53,11 @@ const SLOT_LABELS: Record<string, string> = {
   FULLDAY: 'Full Day',
 }
 
+function positiveInt(value: string | null, fallback: number) {
+  const parsed = parseInt(value || '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
 function PaymentDetails() {
   const router = useRouter()
   const queryParams = useSearchParams()
@@ -72,6 +77,9 @@ function PaymentDetails() {
   const guestName = queryParams.get('guestName') ?? ''
   const guestEmail = queryParams.get('guestEmail') ?? ''
   const guestPhone = queryParams.get('guestPhone') ?? ''
+  const guestCount = positiveInt(queryParams.get('guestCount'), 1)
+  const roomCount = positiveInt(queryParams.get('roomCount'), 1)
+  const maxGuestsPerRoom = positiveInt(queryParams.get('maxGuestsPerRoom'), 3)
   const isMissingBooking = !slotId || !startDate || !slotType || !price || !guestName || !guestEmail || !guestPhone
   const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || ''
   const isGatewayConfigured = razorpayKey.startsWith('rzp_')
@@ -128,6 +136,8 @@ function PaymentDetails() {
           guestName,
           guestEmail,
           guestPhone,
+          guestCount,
+          roomCount,
           totalAmount: Number(price),
           paymentMethod: 'PAY_AT_HOTEL',
         }),
@@ -168,6 +178,8 @@ function PaymentDetails() {
           guestName,
           guestEmail,
           guestPhone,
+          guestCount,
+          roomCount,
           totalAmount: Number(price),
           paymentMethod: 'RAZORPAY',
         }),
@@ -263,6 +275,9 @@ function PaymentDetails() {
             <div className="border-t border-gray-100 pt-3 flex justify-between"><span className="text-gray-500">Dates</span><span className="font-medium">{startDate} to {endDate}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Duration</span><span className="font-medium">{SLOT_LABELS[slotType] || 'Custom'}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Time</span><span className="font-medium">{startTime} - {endTime}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Guests</span><span className="font-medium">{guestCount}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Rooms</span><span className="font-medium">{roomCount}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Capacity</span><span className="font-medium">{maxGuestsPerRoom} guests/room</span></div>
             <div className="border-t border-gray-100 pt-3 flex justify-between text-base">
               <span className="font-semibold">Amount due</span>
               <span className="font-bold text-indigo-600">₹{price}</span>
