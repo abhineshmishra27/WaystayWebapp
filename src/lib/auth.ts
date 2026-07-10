@@ -12,6 +12,7 @@ function isRole(value: unknown): value is Role {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   session: { strategy: 'jwt' },
   providers: [
     CredentialsProvider({
@@ -26,9 +27,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const { prisma } = await import('@/lib/db')
         const bcrypt = (await import('bcryptjs')).default
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-        })
+        const email = String(credentials.email).trim().toLowerCase()
+
+        const user = await prisma.user.findUnique({ where: { email } })
 
         if (!user || !user.isActive) return null
 

@@ -16,17 +16,11 @@ const registerSchema = z.object({
   role: z.enum(['OWNER', 'CUSTOMER']),
 })
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
   try {
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
-    const { success } = rateLimit(`register:${ip}`, 5, 60 * 60 * 1000)
-    if (!success) {
-      return NextResponse.json(
-        { error: 'Too many registration attempts. Try again in an hour.' },
-        { status: 429 }
-      )
-    }
-
     const body = await req.json()
     const parsed = registerSchema.safeParse(body)
 
@@ -37,7 +31,20 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const { name, email, phone, password, role } = parsed.data
+    const { name, phone, password, role } = parsed.data
+    const email = parsed.data.email.trim().toLowerCase()
+    const ip =
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      req.headers.get('x-real-ip') ||
+      'local'
+    const { success } = rateLimit(`register:${ip}:${email}`, 5, 60 * 60 * 1000)
+
+    if (!success) {
+      return NextResponse.json(
+        { error: 'Too many registration attempts for this email. Try again in an hour.' },
+        { status: 429 }
+      )
+    }
 
     const existingUser = await prisma.user.findUnique({ where: { email } })
     if (existingUser) {

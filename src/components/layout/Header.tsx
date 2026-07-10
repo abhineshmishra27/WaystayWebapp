@@ -55,11 +55,14 @@ export default function Header() {
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
   const firstName = session?.user.name?.split(' ')[0] || 'Account'
+  const returnTo = encodeURIComponent(pathname || '/')
+
+  if (pathname === '/') return null
 
   return (
-    <header className="bg-white/95 backdrop-blur border-b border-gray-100 sticky top-0 z-40">
+    <header className="bg-white/95 backdrop-blur border-b border-[var(--waystay-border)] sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-        <Link href="/" className="flex items-center gap-2 font-bold text-xl text-indigo-600 shrink-0">
+        <Link href="/" className="flex items-center gap-2 font-bold text-xl shrink-0">
           <Image
             src="/waystayy-icon.png"
             alt=""
@@ -68,14 +71,14 @@ export default function Header() {
             priority
             className="h-10 w-10 rounded-xl object-cover"
           />
-          <span>WayStayy</span>
+          <span><span className="text-[var(--waystay-orange)]">Way</span><span className="text-[var(--waystay-blue)]">Stayy</span></span>
         </Link>
 
-        <nav className="flex items-center gap-1 rounded-xl bg-gray-50 border border-gray-100 p-1 overflow-x-auto">
+        <nav className="flex items-center gap-1 rounded-xl bg-[var(--waystay-orange-soft)] border border-[var(--waystay-orange-tint)] p-1 overflow-x-auto">
           <Link
             href="/hotels"
             className={`whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              isActive('/hotels') ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-indigo-600 hover:bg-white'
+              isActive('/hotels') ? 'bg-white text-[var(--waystay-blue)] shadow-sm' : 'text-slate-600 hover:text-[var(--waystay-orange)] hover:bg-white'
             }`}
           >
             Find Hotels
@@ -85,7 +88,7 @@ export default function Header() {
               key={l.href}
               href={l.href}
               className={`whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isActive(l.href) ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-indigo-600 hover:bg-white'
+                isActive(l.href) ? 'bg-white text-[var(--waystay-blue)] shadow-sm' : 'text-slate-600 hover:text-[var(--waystay-orange)] hover:bg-white'
               }`}
             >
               {l.label}
@@ -96,8 +99,8 @@ export default function Header() {
         <div className="flex items-center gap-3 shrink-0">
           {!session ? (
             <>
-              <Link href="/login" className="hidden sm:block text-sm text-gray-600 hover:text-indigo-600">Sign in</Link>
-              <Link href="/register" className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">Get started</Link>
+              <Link href={`/login?returnTo=${returnTo}`} className="hidden sm:block text-sm text-slate-600 hover:text-[var(--waystay-orange)]">Sign in</Link>
+              <Link href={`/register?returnTo=${returnTo}`} className="bg-[var(--waystay-orange)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--waystay-orange-dark)]">Get started</Link>
             </>
           ) : (
             <div className="relative" ref={menuRef}>

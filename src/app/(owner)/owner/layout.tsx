@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
+import Image from 'next/image'
 import Link from 'next/link'
 import LogoutButton from '@/components/LogoutButton'
 
@@ -20,7 +21,18 @@ export default async function OwnerLayout({ children }: { children: ReactNode })
     <div className="flex min-h-screen bg-gray-50">
       <aside className="w-60 bg-white border-r border-gray-100 flex flex-col fixed h-full">
         <div className="p-5 border-b border-gray-100">
-          <span className="text-xl font-bold text-indigo-600">WayStayy</span>
+          <Link href="/" className="flex items-center gap-2">
+            <Image
+              src="/waystayy-icon.png"
+              alt=""
+              width={36}
+              height={36}
+              className="h-9 w-9 rounded-xl object-cover"
+            />
+            <span className="text-xl font-bold">
+              <span className="text-[var(--waystay-orange)]">Way</span><span className="text-[var(--waystay-blue)]">Stayy</span>
+            </span>
+          </Link>
           <p className="text-xs text-gray-400 mt-0.5">Owner Portal</p>
         </div>
         <nav className="flex-1 p-4 space-y-1">

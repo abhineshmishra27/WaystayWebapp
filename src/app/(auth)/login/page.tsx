@@ -1,7 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { getProviders, signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -14,19 +14,24 @@ const schema = z.object({
 })
 type FormData = z.infer<typeof schema>
 
-export default function LoginPage() {
+function getAuthRedirect(returnTo: string | null) {
+  if (!returnTo || returnTo === '/') return '/hotels'
+  return returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/hotels'
+}
+
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [googleEnabled, setGoogleEnabled] = useState(false)
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) })
 
-  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const registered = searchParams.get('registered') === 'true' || searchParams.has('registered')
   const unauthorized = searchParams.get('error') === 'unauthorized'
   const authError = searchParams.get('error')
   const returnTo = searchParams.get('returnTo')
-  const redirectTo = returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/hotels'
+  const redirectTo = getAuthRedirect(returnTo)
   const registerHref = returnTo
     ? `/register?returnTo=${encodeURIComponent(redirectTo)}`
     : '/register'
@@ -39,14 +44,20 @@ export default function LoginPage() {
 
   const onSubmit = async (data: FormData) => {
     setLoading(true)
-    const result = await signIn('credentials', { ...data, redirect: false })
-    if (result?.error) {
-      toast.error('Invalid email or password')
+    try {
+      const result = await signIn('credentials', { ...data, redirect: false, redirectTo })
+      if (!result?.ok || result.error) {
+        toast.error('Invalid email or password')
+        return
+      }
+
+      router.replace(redirectTo)
+      router.refresh()
+    } catch {
+      toast.error('Unable to sign in. Please try again.')
+    } finally {
       setLoading(false)
-      return
     }
-    router.replace(redirectTo)
-    router.refresh()
   }
 
   const handleGoogleSignIn = async () => {
@@ -140,5 +151,13 @@ export default function LoginPage() {
 
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <LoginForm />
+    </Suspense>
   )
 }

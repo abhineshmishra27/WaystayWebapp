@@ -1,5 +1,6 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
+import Image from 'next/image'
 import Link from 'next/link'
 import LogoutButton from '@/components/LogoutButton'
 
@@ -18,7 +19,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="flex min-h-screen bg-gray-50">
       <aside className="w-56 bg-white border-r border-gray-100 fixed h-full">
         <div className="p-5 border-b border-gray-100">
-          <span className="font-bold text-indigo-600 text-lg">WayStayy</span>
+          <Link href="/" className="flex items-center gap-2">
+            <Image
+              src="/waystayy-icon.png"
+              alt=""
+              width={36}
+              height={36}
+              className="h-9 w-9 rounded-xl object-cover"
+            />
+            <span className="font-bold text-lg">
+              <span className="text-[var(--waystay-orange)]">Way</span><span className="text-[var(--waystay-blue)]">Stayy</span>
+            </span>
+          </Link>
           <p className="text-xs text-red-500 font-medium">Admin Portal</p>
         </div>
         <nav className="p-4 space-y-1">

@@ -13,7 +13,7 @@ export default function LogoutButton({ className = 'text-xs text-red-500 mt-2 ho
   const handleSignOut = async () => {
     setIsSigningOut(true)
     await signOut({ redirect: false })
-    window.location.assign('/login')
+    window.location.assign('/')
   }
 
   return (

@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f5f7fa;
+  --foreground: #0a2540;
+  --waystay-blue: #0a2540;
+  --waystay-blue-light: #12335e;
+  --waystay-orange: #ff6b00;
+  --waystay-orange-dark: #e25e00;
+  --waystay-orange-tint: #ffe8d6;
+  --waystay-orange-soft: #fff3ea;
+  --waystay-border: #e2e8f0;
 }
 
 @theme inline {
@@ -14,8 +21,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #f5f7fa;
+    --foreground: #0a2540;
   }
 }
 
@@ -23,4 +30,66 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+::selection {
+  background: var(--waystay-orange-tint);
+  color: var(--waystay-blue);
+}
+
+.bg-indigo-600 {
+  background-color: var(--waystay-orange) !important;
+}
+
+.hover\:bg-indigo-700:hover {
+  background-color: var(--waystay-orange-dark) !important;
+}
+
+.bg-indigo-50 {
+  background-color: var(--waystay-orange-soft) !important;
+}
+
+.bg-indigo-100,
+.hover\:bg-indigo-100:hover {
+  background-color: var(--waystay-orange-tint) !important;
+}
+
+.text-indigo-600,
+.hover\:text-indigo-600:hover {
+  color: var(--waystay-orange) !important;
+}
+
+.text-indigo-700 {
+  color: var(--waystay-blue) !important;
+}
+
+.text-indigo-500 {
+  color: var(--waystay-orange-dark) !important;
+}
+
+.text-indigo-400 {
+  color: #b65a12 !important;
+}
+
+.text-indigo-100 {
+  color: var(--waystay-orange-tint) !important;
+}
+
+.border-indigo-600,
+.hover\:border-indigo-400:hover {
+  border-color: var(--waystay-orange) !important;
+}
+
+.border-indigo-200,
+.hover\:border-indigo-200:hover {
+  border-color: #ffc08a !important;
+}
+
+.border-indigo-100,
+.hover\:border-indigo-100:hover {
+  border-color: #ffd9ba !important;
+}
+
+.focus\:ring-indigo-500:focus {
+  --tw-ring-color: var(--waystay-orange) !important;
 }

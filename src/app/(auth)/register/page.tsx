@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 import { useForm } from 'react-hook-form'
@@ -19,12 +19,17 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
-export default function RegisterPage() {
+function getAuthRedirect(returnTo: string | null) {
+  if (!returnTo || returnTo === '/') return '/hotels'
+  return returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/hotels'
+}
+
+function RegisterForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)
-  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const returnTo = searchParams.get('returnTo')
-  const redirectTo = returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/'
+  const redirectTo = getAuthRedirect(returnTo)
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { role: 'CUSTOMER' },
@@ -32,33 +37,39 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: FormData) => {
     setLoading(true)
-    const res = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-    const json = await res.json()
-    if (!res.ok) {
-      toast.error(json.error || 'Registration failed')
-      setLoading(false)
-      return
-    }
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error || 'Registration failed')
+        return
+      }
 
-    const signInResult = await signIn('credentials', {
-      email: data.email,
-      password: data.password,
-      redirect: false,
-    })
+      const signInResult = await signIn('credentials', {
+        email: data.email,
+        password: data.password,
+        redirect: false,
+        redirectTo,
+      })
 
-    if (signInResult?.error) {
-      toast.success('Account created. Please sign in.')
-      router.replace(`/login?returnTo=${encodeURIComponent(redirectTo)}`)
+      if (!signInResult?.ok || signInResult.error) {
+        toast.success('Account created. Please sign in.')
+        router.replace(`/login?registered=true&returnTo=${encodeURIComponent(redirectTo)}`)
+        router.refresh()
+        return
+      }
+
+      router.replace(redirectTo)
       router.refresh()
-      return
+    } catch {
+      toast.error('Unable to create account. Please try again.')
+    } finally {
+      setLoading(false)
     }
-
-    router.replace(redirectTo)
-    router.refresh()
   }
 
   const fields = [
@@ -112,9 +123,17 @@ export default function RegisterPage() {
 
         <p className="text-center text-sm text-gray-500 mt-4">
           Already have an account?{' '}
-          <Link href="/login" className="text-indigo-600 hover:underline font-medium">Sign in</Link>
+          <Link href={`/login?returnTo=${encodeURIComponent(redirectTo)}`} className="text-indigo-600 hover:underline font-medium">Sign in</Link>
         </p>
       </div>
     </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <RegisterForm />
+    </Suspense>
   )
 }

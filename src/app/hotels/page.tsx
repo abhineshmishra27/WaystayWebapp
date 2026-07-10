@@ -17,9 +17,13 @@ export default async function HotelsPage({ searchParams }: { searchParams: Promi
   const normalizedSearchParams = normalizeSearchParams(await searchParams)
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-100 px-4 py-4">
+    <div className="min-h-screen bg-[var(--background)]">
+      <div className="bg-[var(--waystay-blue)] border-b border-[var(--waystay-blue-light)] px-4 py-6">
         <div className="max-w-6xl mx-auto">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--waystay-orange)]">
+            Verified hourly and full-day stays
+          </p>
+          <h1 className="mb-4 text-2xl font-bold text-white">Find a clean stop for the road ahead</h1>
           <SearchBar
             className="max-w-3xl"
             initialCity={normalizedSearchParams.city}
