@@ -29,10 +29,11 @@ function RegisterForm() {
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)
   const returnTo = searchParams.get('returnTo')
+  const requestedRole = searchParams.get('role') === 'OWNER' ? 'OWNER' : 'CUSTOMER'
   const redirectTo = getAuthRedirect(returnTo)
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { role: 'CUSTOMER' },
+    defaultValues: { role: requestedRole },
   })
 
   const onSubmit = async (data: FormData) => {

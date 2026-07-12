@@ -32,6 +32,9 @@ export default async function HotelsPage({ searchParams }: { searchParams: Promi
             initialSlot={normalizedSearchParams.slot}
             initialGuestCount={normalizedSearchParams.guestCount}
             initialRoomCount={normalizedSearchParams.roomCount}
+            initialLat={normalizedSearchParams.lat}
+            initialLng={normalizedSearchParams.lng}
+            initialRadius={normalizedSearchParams.radius}
           />
         </div>
       </div>

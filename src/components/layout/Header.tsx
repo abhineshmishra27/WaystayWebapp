@@ -1,35 +1,19 @@
 'use client'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
-import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
+import BrandLogo from '@/components/BrandLogo'
 import LogoutButton from '@/components/LogoutButton'
 
 export default function Header() {
   const { data: session } = useSession()
   const pathname = usePathname()
-  const role = session?.user?.role
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const navLinks = {
-    CUSTOMER: [
-      { href: '/dashboard/bookings', label: 'My bookings' },
-    ],
-    OWNER: [
-      { href: '/owner/hotels', label: 'My hotels' },
-      { href: '/owner/bookings', label: 'Bookings' },
-    ],
-    ADMIN: [
-      { href: '/admin/hotels', label: 'Admin panel' },
-    ],
-  }
-
-  const links = role ? (navLinks[role as keyof typeof navLinks] || []) : []
-  const accountLinks = role === 'CUSTOMER'
-    ? [{ href: '/dashboard/profile', label: 'Profile' }, ...links]
-    : links
+  const firstName = session?.user.name?.split(' ')[0] || 'Account'
+  const returnTo = encodeURIComponent(pathname || '/')
 
   useEffect(() => {
     if (!menuOpen) return
@@ -53,91 +37,71 @@ export default function Header() {
     }
   }, [menuOpen])
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
-  const firstName = session?.user.name?.split(' ')[0] || 'Account'
-  const returnTo = encodeURIComponent(pathname || '/')
-
   if (pathname === '/') return null
 
   return (
-    <header className="bg-white/95 backdrop-blur border-b border-[var(--waystay-border)] sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-        <Link href="/" className="flex items-center gap-2 font-bold text-xl shrink-0">
-          <Image
-            src="/waystayy-icon.png"
-            alt=""
-            width={40}
-            height={40}
-            priority
-            className="h-10 w-10 rounded-xl object-cover"
-          />
-          <span><span className="text-[var(--waystay-orange)]">Way</span><span className="text-[var(--waystay-blue)]">Stayy</span></span>
-        </Link>
+    <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
+      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+        <BrandLogo className="flex items-center gap-2 shrink-0" />
 
-        <nav className="flex items-center gap-1 rounded-xl bg-[var(--waystay-orange-soft)] border border-[var(--waystay-orange-tint)] p-1 overflow-x-auto">
-          <Link
-            href="/hotels"
-            className={`whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              isActive('/hotels') ? 'bg-white text-[var(--waystay-blue)] shadow-sm' : 'text-slate-600 hover:text-[var(--waystay-orange)] hover:bg-white'
-            }`}
-          >
-            Find Hotels
-          </Link>
-          {links.map(l => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className={`whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isActive(l.href) ? 'bg-white text-[var(--waystay-blue)] shadow-sm' : 'text-slate-600 hover:text-[var(--waystay-orange)] hover:bg-white'
-              }`}
-            >
-              {l.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="flex items-center gap-3 shrink-0">
+        <nav className="flex items-center gap-2 sm:gap-3">
           {!session ? (
             <>
-              <Link href={`/login?returnTo=${returnTo}`} className="hidden sm:block text-sm text-slate-600 hover:text-[var(--waystay-orange)]">Sign in</Link>
-              <Link href={`/register?returnTo=${returnTo}`} className="bg-[var(--waystay-orange)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--waystay-orange-dark)]">Get started</Link>
+              <Link href={`/login?returnTo=${returnTo}`} className="text-sm font-semibold text-slate-600 hover:text-[var(--waystay-blue)]">Sign in</Link>
+              <Link href={`/register?returnTo=${returnTo}`} className="bg-[var(--waystay-orange)] text-white text-sm font-bold px-3.5 py-2 rounded-lg hover:bg-[var(--waystay-orange-dark)] transition">
+                Signup
+              </Link>
             </>
           ) : (
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
-                onClick={() => setMenuOpen(!menuOpen)}
+                onClick={() => setMenuOpen((open) => !open)}
                 aria-expanded={menuOpen}
-                className="flex items-center gap-2 rounded-full border border-gray-200 bg-white py-1.5 pl-1.5 pr-3 text-sm font-medium text-gray-700 shadow-sm hover:border-indigo-100 hover:text-indigo-600"
+                className="group flex max-w-44 items-center gap-2 rounded-full border border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] py-1.5 pl-1.5 pr-3 text-sm font-semibold text-[var(--waystay-blue)] shadow-sm transition hover:border-[var(--waystay-orange)] hover:bg-white"
               >
                 {session.user.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={session.user.avatarUrl} alt={session.user.name || 'Profile'} className="w-8 h-8 rounded-full object-cover" />
+                  <img src={session.user.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover ring-2 ring-white" />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-medium text-sm">
-                    {session.user.name?.[0]}
-                  </div>
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--waystay-blue)] text-xs font-semibold text-white ring-2 ring-white">
+                    {session.user.name?.[0] || 'A'}
+                  </span>
                 )}
-                <span className="hidden sm:block max-w-24 truncate">{firstName}</span>
-                <span className={`text-gray-400 transition-transform ${menuOpen ? 'rotate-180' : ''}`}>⌄</span>
+                <span className="truncate">{firstName}</span>
+                <svg aria-hidden="true" viewBox="0 0 20 20" className={`h-4 w-4 shrink-0 stroke-[var(--waystay-orange)] transition-transform ${menuOpen ? 'rotate-180' : ''}`}>
+                  <path d="M5 8l5 5 5-5" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
+
               {menuOpen && (
-                <div className="absolute right-0 top-12 bg-white rounded-xl shadow-lg border border-gray-100 py-2 w-52 z-50">
-                  <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-sm font-medium text-gray-900 truncate">{session.user.name}</p>
-                    <p className="text-xs text-gray-400 truncate">{session.user.email}</p>
+                <div className="absolute right-0 top-12 z-50 w-56 overflow-hidden rounded-xl border border-[var(--waystay-orange-tint)] bg-white shadow-xl">
+                  <div className="border-b border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-4 py-3">
+                    <p className="truncate text-sm font-medium text-slate-900">{session.user.name}</p>
+                    <p className="truncate text-xs text-slate-500">{session.user.email}</p>
                   </div>
-                  {accountLinks.map(l => (
-                    <Link key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
-                      className="block px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-indigo-600">{l.label}</Link>
-                  ))}
-                  <hr className="my-1 border-gray-100" />
-                  <LogoutButton className="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 disabled:opacity-60" />
+                  <Link
+                    href="/dashboard/profile"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[var(--waystay-orange-soft)] hover:text-[var(--waystay-blue)]"
+                  >
+                    Profile
+                  </Link>
+                  <Link
+                    href="/dashboard/bookings"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[var(--waystay-orange-soft)] hover:text-[var(--waystay-blue)]"
+                  >
+                    My bookings
+                  </Link>
+                  <div className="border-t border-[var(--waystay-orange-tint)] py-1">
+                    <LogoutButton className="block w-full px-4 py-2.5 text-left text-sm font-medium text-red-500 hover:bg-red-50 disabled:opacity-60" />
+                  </div>
                 </div>
               )}
             </div>
           )}
-        </div>
+        </nav>
       </div>
     </header>
   )

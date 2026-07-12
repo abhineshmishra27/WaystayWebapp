@@ -1,28 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 
+function distanceKm(fromLat: number, fromLng: number, toLat: number, toLng: number) {
+  const earthRadiusKm = 6371
+  const dLat = ((toLat - fromLat) * Math.PI) / 180
+  const dLng = ((toLng - fromLng) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((fromLat * Math.PI) / 180) *
+      Math.cos((toLat * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return earthRadiusKm * c
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url, process.env.NEXTAUTH_URL || 'http://localhost:3000')
     const city = searchParams.get('city')
-    const lat = parseFloat(searchParams.get('lat') || '0')
-    const lng = parseFloat(searchParams.get('lng') || '0')
-    const radius = parseFloat(searchParams.get('radius') || '10')
+    const latParam = searchParams.get('lat')
+    const lngParam = searchParams.get('lng')
+    const hasLat = latParam !== null && latParam.trim() !== ''
+    const hasLng = lngParam !== null && lngParam.trim() !== ''
+    const hasCoords = hasLat && hasLng
+    const lat = hasLat ? parseFloat(latParam || '') : null
+    const lng = hasLng ? parseFloat(lngParam || '') : null
+    const requestedRadius = parseFloat(searchParams.get('radius') || '50')
+    const radius = Number.isFinite(requestedRadius) ? Math.min(Math.max(requestedRadius, 1), 250) : 50
     const date = searchParams.get('date')
     const startDate = searchParams.get('startDate') ?? date
     const endDate = searchParams.get('endDate') ?? startDate
     const slotType = (searchParams.get('slot') as 'H3' | 'H6' | 'H12' | 'FULLDAY' | null)
     const roomCount = Math.max(1, Math.min(10, parseInt(searchParams.get('roomCount') || '1', 10) || 1))
 
-    if (searchParams.get('lat') && (isNaN(lat) || lat < -90 || lat > 90)) {
+    if (hasLat !== hasLng) {
+      return NextResponse.json({ error: 'lat and lng are both required' }, { status: 400 })
+    }
+    if (hasCoords && (lat === null || Number.isNaN(lat) || lat < -90 || lat > 90)) {
       return NextResponse.json({ error: 'Invalid lat' }, { status: 400 })
     }
-    if (searchParams.get('lng') && (isNaN(lng) || lng < -180 || lng > 180)) {
+    if (hasCoords && (lng === null || Number.isNaN(lng) || lng < -180 || lng > 180)) {
       return NextResponse.json({ error: 'Invalid lng' }, { status: 400 })
     }
-    const page = parseInt(searchParams.get('page') || '1', 10)
+    const requestedPage = parseInt(searchParams.get('page') || '1', 10)
+    const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1
     const limit = 20
     const skip = (page - 1) * limit
+    const distanceByHotelId = new Map<string, number>()
 
     let hotels = await prisma.hotel.findMany({
       where: {
@@ -40,25 +65,17 @@ export async function GET(req: NextRequest) {
           orderBy: { price_3h: 'asc' },
         },
       },
-      skip,
-      take: limit,
     })
 
-    if (lat && lng && !city) {
-      hotels = hotels.filter(hotel => {
-        const R = 6371
-        const dLat = ((hotel.lat - lat) * Math.PI) / 180
-        const dLng = ((hotel.lng - lng) * Math.PI) / 180
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos((lat * Math.PI) / 180) *
-            Math.cos((hotel.lat * Math.PI) / 180) *
-            Math.sin(dLng / 2) *
-            Math.sin(dLng / 2)
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        const distance = R * c
-        return distance <= radius
-      })
+    if (hasCoords && lat !== null && lng !== null) {
+      hotels = hotels
+        .map(hotel => {
+          const distance = distanceKm(lat, lng, hotel.lat, hotel.lng)
+          distanceByHotelId.set(hotel.id, distance)
+          return hotel
+        })
+        .filter(hotel => (distanceByHotelId.get(hotel.id) ?? Infinity) <= radius)
+        .sort((a, b) => (distanceByHotelId.get(a.id) ?? Infinity) - (distanceByHotelId.get(b.id) ?? Infinity))
     }
 
     let filteredHotels = hotels
@@ -87,7 +104,10 @@ export async function GET(req: NextRequest) {
       filteredHotels = hotels.filter(hotel => availableHotelIds.includes(hotel.id))
     }
 
-    const result = filteredHotels.map(hotel => {
+    const totalCount = filteredHotels.length
+    const paginatedHotels = filteredHotels.slice(skip, skip + limit)
+
+    const result = paginatedHotels.map(hotel => {
       const selectedSlotPrice = slotType === 'H6'
         ? hotel.rooms[0]?.price_6h || null
         : slotType === 'H12'
@@ -102,6 +122,7 @@ export async function GET(req: NextRequest) {
       name: hotel.name,
       city: hotel.city,
       state: hotel.state,
+      distanceKm: distanceByHotelId.has(hotel.id) ? Number((distanceByHotelId.get(hotel.id) || 0).toFixed(1)) : null,
       lat: hotel.lat,
       lng: hotel.lng,
       image: hotel.images[0]?.url || null,
@@ -118,7 +139,7 @@ export async function GET(req: NextRequest) {
     }
     })
 
-    return NextResponse.json({ hotels: result, count: result.length, page })
+    return NextResponse.json({ hotels: result, count: totalCount, page })
   } catch (error) {
     console.error('Search error:', error)
     return NextResponse.json({ error: 'Search failed' }, { status: 500 })
