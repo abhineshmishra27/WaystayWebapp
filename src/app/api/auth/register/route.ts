@@ -3,17 +3,20 @@ import { prisma } from '@/lib/db'
 import { rateLimit } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
+import { normalizePhone, verifyOtp } from '@/lib/otp'
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
   phone: z.string().min(10, 'Phone must be at least 10 digits'),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Must contain uppercase letter')
-    .regex(/[0-9]/, 'Must contain a number'),
+  otp: z.string().regex(/^\d{6}$/, 'Enter the 6-digit OTP').optional(),
+  password: z.string().optional(),
   role: z.enum(['OWNER', 'CUSTOMER']),
+}).superRefine((data, ctx) => {
+  if (data.otp) return
+  if (!data.password || data.password.length < 8 || !/[A-Z]/.test(data.password) || !/[0-9]/.test(data.password)) {
+    ctx.addIssue({ code: 'custom', path: ['password'], message: 'Password must be 8+ characters with uppercase and number' })
+  }
 })
 
 export const runtime = 'nodejs'
@@ -31,7 +34,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const { name, phone, password, role } = parsed.data
+    const { name, password, role, otp } = parsed.data
+    const phone = normalizePhone(parsed.data.phone)
+    if (otp && !verifyOtp(phone, 'register', otp)) {
+      return NextResponse.json({ error: 'Incorrect or expired OTP. Request a new code.' }, { status: 400 })
+    }
     const email = parsed.data.email.trim().toLowerCase()
     const ip =
       req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
@@ -54,7 +61,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const passwordHash = await bcrypt.hash(password, 12)
+    const passwordHash = await bcrypt.hash(
+      password || `${globalThis.crypto.randomUUID()}${globalThis.crypto.randomUUID()}`,
+      12,
+    )
 
     const user = await prisma.user.create({
       data: { name, email, phone, passwordHash, role },

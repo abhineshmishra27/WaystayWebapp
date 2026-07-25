@@ -1,140 +1,45 @@
 'use client'
 import { Suspense, useState } from 'react'
+import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { signIn } from 'next-auth/react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import toast, { Toaster } from 'react-hot-toast'
 
-const schema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Invalid email'),
-  phone: z.string().min(10, 'Enter a valid phone number'),
-  password: z.string().min(8).regex(/[A-Z]/, 'Must contain uppercase').regex(/[0-9]/, 'Must contain number'),
-  confirmPassword: z.string(),
-  role: z.enum(['OWNER', 'CUSTOMER']),
-}).refine(d => d.password === d.confirmPassword, { message: "Passwords don't match", path: ['confirmPassword'] })
-
-type FormData = z.infer<typeof schema>
-
-function getAuthRedirect(returnTo: string | null) {
-  if (!returnTo || returnTo === '/') return '/hotels'
-  return returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/hotels'
-}
+type Method = 'password' | 'otp'
 
 function RegisterForm() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const [loading, setLoading] = useState(false)
-  const returnTo = searchParams.get('returnTo')
-  const requestedRole = searchParams.get('role') === 'OWNER' ? 'OWNER' : 'CUSTOMER'
-  const redirectTo = getAuthRedirect(returnTo)
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: { role: requestedRole },
-  })
+  const router = useRouter(); const params = useSearchParams(); const redirectTo = params.get('returnTo')?.startsWith('/') && !params.get('returnTo')?.startsWith('//') ? params.get('returnTo')! : '/hotels'
+  const [method, setMethod] = useState<Method>('password')
+  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '', role: 'CUSTOMER' })
+  const [otp, setOtp] = useState(''); const [sent, setSent] = useState(false); const [loading, setLoading] = useState(false); const [cooldown, setCooldown] = useState(0)
+  const update = (key: string, value: string) => setForm(current => ({ ...current, [key]: value }))
+  const validDetails = form.name.trim().length >= 2 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) && /^[6-9]\d{9}$/.test(form.phone)
+  const validPassword = form.password.length >= 8 && /[A-Z]/.test(form.password) && /[0-9]/.test(form.password) && form.password === form.confirmPassword
 
-  const onSubmit = async (data: FormData) => {
+  const sendOtp = async () => {
+    if (!validDetails) return toast.error('Complete your name, email, and mobile number first.')
     setLoading(true)
-    try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      const json = await res.json()
-      if (!res.ok) {
-        toast.error(json.error || 'Registration failed')
-        return
-      }
-
-      const signInResult = await signIn('credentials', {
-        email: data.email,
-        password: data.password,
-        redirect: false,
-        redirectTo,
-      })
-
-      if (!signInResult?.ok || signInResult.error) {
-        toast.success('Account created. Please sign in.')
-        router.replace(`/login?registered=true&returnTo=${encodeURIComponent(redirectTo)}`)
-        router.refresh()
-        return
-      }
-
-      router.replace(redirectTo)
-      router.refresh()
-    } catch {
-      toast.error('Unable to create account. Please try again.')
-    } finally {
-      setLoading(false)
-    }
+    try { const res = await fetch('/api/auth/otp/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier: form.phone, purpose: 'register' }) }); const data = await res.json(); if (!res.ok) throw new Error(data.error); setSent(true); setCooldown(30); if (data.demoOtp) toast.success(`Demo OTP: ${data.demoOtp}`, { duration: 10000 }); const timer = window.setInterval(() => setCooldown(value => { if (value <= 1) { window.clearInterval(timer); return 0 }; return value - 1 }), 1000) } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not send OTP.') } finally { setLoading(false) }
   }
 
-  const fields = [
-    { name: 'name', label: 'Full name', type: 'text', placeholder: 'John Doe' },
-    { name: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com' },
-    { name: 'phone', label: 'Phone', type: 'tel', placeholder: '9876543210' },
-    { name: 'password', label: 'Password', type: 'password', placeholder: '••••••••' },
-    { name: 'confirmPassword', label: 'Confirm password', type: 'password', placeholder: '••••••••' },
-  ] as const
+  const createAccount = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!validDetails) return toast.error('Complete your name, email, and mobile number first.')
+    if (method === 'password' && !validPassword) return toast.error('Use an 8+ character password with an uppercase letter and number.')
+    if (method === 'otp' && !/^\d{6}$/.test(otp)) return toast.error('Enter the 6-digit OTP.')
+    setLoading(true)
+    try { const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, email: form.email, phone: form.phone, role: form.role, ...(method === 'password' ? { password: form.password } : { otp }) }) }); const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Registration failed'); if (method === 'otp') { router.replace(`/login?registered=true&returnTo=${encodeURIComponent(redirectTo)}`); router.refresh(); return } const result = await signIn('credentials', { identifier: form.email, password: form.password, redirect: false, redirectTo }); if (!result?.ok) router.replace(`/login?registered=true&returnTo=${encodeURIComponent(redirectTo)}`); else { router.replace(redirectTo); router.refresh() } } catch (error) { toast.error(error instanceof Error ? error.message : 'Unable to create account.') } finally { setLoading(false) }
+  }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
-      <Toaster />
-      <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 w-full max-w-md">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-2">Create account</h1>
-        <p className="text-gray-500 text-sm mb-6">Join WayStayy today</p>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {fields.map(f => (
-            <div key={f.name}>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
-              <input
-                type={f.type}
-                {...register(f.name)}
-                placeholder={f.placeholder}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              {errors[f.name] && <p className="text-red-500 text-xs mt-1">{errors[f.name]?.message}</p>}
-            </div>
-          ))}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">I am a</label>
-            <select
-              {...register('role')}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-            >
-              <option value="CUSTOMER">Customer — looking to book hotels</option>
-              <option value="OWNER">Hotel Owner — want to list my property</option>
-            </select>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
-            {loading ? 'Creating account...' : 'Create account'}
-          </button>
-        </form>
-
-        <p className="text-center text-sm text-gray-500 mt-4">
-          Already have an account?{' '}
-          <Link href={`/login?returnTo=${encodeURIComponent(redirectTo)}`} className="text-indigo-600 hover:underline font-medium">Sign in</Link>
-        </p>
-      </div>
-    </div>
-  )
+  const chooseMethod = (next: Method) => { setMethod(next); setSent(false); setOtp('') }
+  return <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8"><Toaster /><div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 w-full max-w-md"><h1 className="text-2xl font-semibold text-gray-900 mb-2">Create account</h1><p className="text-gray-500 text-sm mb-6">Join WayStayy today</p>
+    <form onSubmit={createAccount} className="space-y-4"><div className="flex rounded-lg bg-gray-100 p-1 gap-1"><button type="button" onClick={() => chooseMethod('password')} className={`flex-1 py-2 rounded-md text-sm font-medium ${method === 'password' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>Password</button><button type="button" onClick={() => chooseMethod('otp')} className={`flex-1 py-2 rounded-md text-sm font-medium ${method === 'otp' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>OTP</button></div>
+      <p className="text-xs text-gray-500">{method === 'password' ? 'Create an account with a password.' : 'Create an account using a one-time code sent to your mobile.'}</p>
+      {([['name', 'Full name', 'text'], ['email', 'Email address', 'email'], ['phone', '10-digit mobile number', 'tel']] as const).map(([key, placeholder, type]) => <input key={key} type={type} value={form[key]} onChange={e => update(key, key === 'phone' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value)} placeholder={placeholder} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />)}
+      {method === 'password' && <><input type="password" value={form.password} onChange={e => update('password', e.target.value)} placeholder="Create password (min 8 characters)" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /><input type="password" value={form.confirmPassword} onChange={e => update('confirmPassword', e.target.value)} placeholder="Confirm password" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></>}
+      <select value={form.role} onChange={e => update('role', e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"><option value="CUSTOMER">Customer — looking to book hotels</option><option value="OWNER">Hotel Owner — want to list my property</option></select>
+      {method === 'otp' && sent && <><input autoFocus value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" maxLength={6} autoComplete="one-time-code" placeholder="Enter 6-digit OTP" className="w-full text-center tracking-[0.35em] text-lg border border-gray-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" /><div className="flex justify-between text-xs"><button type="button" onClick={() => setSent(false)} className="text-gray-500 font-medium">Change details</button><button type="button" onClick={sendOtp} disabled={loading || cooldown > 0} className="text-indigo-600 font-medium disabled:text-gray-400">{cooldown ? `Resend OTP (${cooldown}s)` : 'Resend OTP'}</button></div></>}
+      {method === 'otp' && !sent ? <button type="button" onClick={sendOtp} disabled={loading} className="w-full bg-indigo-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">{loading ? 'Sending OTP...' : 'Send OTP'}</button> : <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">{loading ? 'Creating account...' : method === 'otp' ? 'Verify & Create Account' : 'Create account'}</button>}</form>
+    <p className="text-center text-sm text-gray-500 mt-4">Already have an account? <Link href={`/login?returnTo=${encodeURIComponent(redirectTo)}`} className="text-indigo-600 hover:underline font-medium">Sign in</Link></p></div></div>
 }
-
-export default function RegisterPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
-      <RegisterForm />
-    </Suspense>
-  )
-}
+export default function RegisterPage() { return <Suspense fallback={<div className="min-h-screen bg-gray-50" />}><RegisterForm /></Suspense> }

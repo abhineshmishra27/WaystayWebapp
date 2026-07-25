@@ -2,6 +2,7 @@ import NextAuth from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import GoogleProvider from 'next-auth/providers/google'
 import type { Role } from '@prisma/client'
+import { normalizeIdentifier, verifyOtp } from '@/lib/otp'
 
 const ROLES: readonly Role[] = ['ADMIN', 'OWNER', 'CUSTOMER']
 const googleAuthEnabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET)
@@ -20,16 +21,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
+        identifier: { label: 'Email or mobile', type: 'text' },
+        phone: { label: 'Mobile number', type: 'tel' },
+        otp: { label: 'OTP', type: 'text' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null
+        if (credentials?.identifier && credentials?.otp) {
+          const identifier = normalizeIdentifier(String(credentials.identifier))
+          if (!verifyOtp(identifier, 'login', String(credentials.otp))) return null
+
+          const { prisma } = await import('@/lib/db')
+          const user = await prisma.user.findFirst({ where: { isActive: true, OR: [{ email: identifier }, { phone: identifier }] } })
+          if (!user) return null
+          return { id: user.id, email: user.email, name: user.name, role: user.role, avatarUrl: user.avatarUrl }
+        }
+        if (!credentials?.identifier || !credentials?.password) return null
 
         const { prisma } = await import('@/lib/db')
         const bcrypt = (await import('bcryptjs')).default
 
-        const email = String(credentials.email).trim().toLowerCase()
-
-        const user = await prisma.user.findUnique({ where: { email } })
+        const identifier = normalizeIdentifier(String(credentials.identifier))
+        const user = await prisma.user.findFirst({ where: { isActive: true, OR: [{ email: identifier }, { phone: identifier }] } })
 
         if (!user || !user.isActive) return null
 
