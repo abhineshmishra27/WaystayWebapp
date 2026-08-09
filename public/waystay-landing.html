@@ -435,9 +435,11 @@
 
       document.getElementById('landingSignOut')?.addEventListener('click', signOutFromLanding);
     } catch {
-      actions.innerHTML = '<button type="button" id="landingAuthRetry" class="text-sm font-semibold text-slate-600 hover:text-[var(--trust-blue)]">Retry account</button>';
+      actions.innerHTML = `
+        <a href="/login?returnTo=%2F" target="_top" class="text-sm font-semibold text-slate-600 hover:text-[var(--trust-blue)]">Sign in</a>
+        <a href="/register?returnTo=%2F" target="_top" class="bg-[var(--alert-orange)] text-white text-sm font-bold px-3.5 py-2 rounded-lg hover:bg-[var(--alert-orange-dark)] transition">Signup</a>
+      `;
       actions.setAttribute('aria-busy', 'false');
-      document.getElementById('landingAuthRetry')?.addEventListener('click', hydrateLandingSession);
     }
   }
 
