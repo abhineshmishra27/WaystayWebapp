@@ -40,10 +40,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (!user || (credentials.requiredRole && user.role !== credentials.requiredRole)) return null
           return { id: user.id, email: user.email, name: user.name, role: user.role, avatarUrl: user.avatarUrl }
         }
-        if (credentials?.firebaseIdToken) {
+        const firebaseIdToken = typeof credentials?.firebaseIdToken === 'string'
+          && credentials.firebaseIdToken.length > 100
+          ? credentials.firebaseIdToken
+          : null
+        if (firebaseIdToken) {
           let verifiedPhone: Awaited<ReturnType<typeof verifyFirebasePhoneIdToken>>
           try {
-            verifiedPhone = await verifyFirebasePhoneIdToken(String(credentials.firebaseIdToken))
+            verifiedPhone = await verifyFirebasePhoneIdToken(firebaseIdToken)
           } catch {
             return null
           }

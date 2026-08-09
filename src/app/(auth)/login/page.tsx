@@ -134,11 +134,14 @@ function LoginForm() {
         firebaseChallenge.current = null
       }
 
+      const credentials = method === 'password'
+        ? { identifier: normalizedIdentifier, password }
+        : isPhone
+          ? { firebaseIdToken: firebaseIdToken as string }
+          : { identifier: normalizedIdentifier, otp }
+
       const result = await signIn('credentials', {
-        identifier: normalizedIdentifier,
-        password: method === 'password' ? password : undefined,
-        otp: method === 'otp' && isEmail ? otp : undefined,
-        firebaseIdToken,
+        ...credentials,
         redirect: false,
         redirectTo,
       })
