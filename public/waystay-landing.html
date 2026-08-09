@@ -101,10 +101,10 @@
 <!-- LOGO HEADER -->
 <header class="bg-white border-b border-slate-200">
   <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-    <div class="flex items-center gap-2">
+    <a href="/" target="_top" aria-label="Go to Waystay home" class="flex items-center gap-2 cursor-pointer">
       <img src="/waystay-logo.png" alt="Waystay" class="h-9 w-auto">
       <span class="text-xl font-normal tracking-tight" style="font-family:Inter,Arial,Helvetica,sans-serif"><span style="color:var(--alert-orange)">Way</span><span style="color:var(--trust-blue)">stay</span></span>
-    </div>
+    </a>
     <div id="landingAuthNav" class="flex items-center gap-2 sm:gap-3">
       <a href="#offers" class="hidden md:inline-flex items-center gap-1.5 rounded-full border border-[#FFE8D6] bg-[#FFF3EA] px-3 py-2 text-sm font-bold text-[var(--trust-blue)] shadow-sm transition hover:border-[var(--alert-orange)] hover:bg-white hover:text-[var(--alert-orange-dark)]">
         <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" class="shrink-0"><path d="M4 8.5V6a2 2 0 012-2h12a2 2 0 012 2v2.5a2.5 2.5 0 000 5V18a2 2 0 01-2 2H6a2 2 0 01-2-2v-4.5a2.5 2.5 0 000-5z" stroke="#FF6B00" stroke-width="2" stroke-linejoin="round"/><path d="M9 9h6M9 15h4" stroke="#FF6B00" stroke-width="2" stroke-linecap="round"/></svg>
@@ -114,12 +114,12 @@
         <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" class="shrink-0"><path d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3z" stroke="#FF6B00" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 12l1.7 1.7 3.6-4" stroke="#FF6B00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span>Why travellers trust us</span>
       </a>
-      <a href="/register?role=OWNER&returnTo=%2Fowner%2Fhotels%2Fnew" target="_top" class="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-[#FFE8D6] bg-[#FFF3EA] px-3 py-2 text-sm font-bold text-[var(--trust-blue)] shadow-sm transition hover:border-[var(--alert-orange)] hover:bg-white hover:text-[var(--alert-orange-dark)]">
+      <a href="/partner" target="_top" class="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-[#FFE8D6] bg-[#FFF3EA] px-3 py-2 text-sm font-bold text-[var(--trust-blue)] shadow-sm transition hover:border-[var(--alert-orange)] hover:bg-white hover:text-[var(--alert-orange-dark)]">
         <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" class="shrink-0"><path d="M4 20V8.5L12 4l8 4.5V20" stroke="#FF6B00" stroke-width="2" stroke-linejoin="round"/><path d="M9 20v-6h6v6M8 10h2M14 10h2" stroke="#FF6B00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span>Partner your property</span>
       </a>
-      <a href="/login?returnTo=%2Fhotels%3Fslot%3DH3" target="_top" class="text-sm font-semibold text-slate-600 hover:text-[var(--trust-blue)]">Sign in</a>
-      <a href="/register?returnTo=%2Fhotels%3Fslot%3DH3" target="_top" class="bg-[var(--alert-orange)] text-white text-sm font-bold px-3.5 py-2 rounded-lg hover:bg-[var(--alert-orange-dark)] transition">Signup</a>
+      <a href="/login?returnTo=%2F" target="_top" class="text-sm font-semibold text-slate-600 hover:text-[var(--trust-blue)]">Sign in</a>
+      <a href="/register?returnTo=%2F" target="_top" class="bg-[var(--alert-orange)] text-white text-sm font-bold px-3.5 py-2 rounded-lg hover:bg-[var(--alert-orange-dark)] transition">Signup</a>
     </div>
   </div>
 </header>
@@ -200,7 +200,7 @@
   <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
     <div>
       <h2 class="font-display font-800 text-2xl md:text-3xl">Stops open right now</h2>
-      <p class="text-slate-500 text-sm mt-1">Pick your pace. Every room passes the same checklist either way.</p>
+      <p class="text-slate-500 text-sm mt-1">Up to two top-rated stays per city. Swipe or scroll to explore.</p>
     </div>
 
     <div id="velocityToggle" data-mode="day" class="inline-flex bg-white border border-slate-200 rounded-xl p-1 self-start">
@@ -209,68 +209,19 @@
     </div>
   </div>
 
-  <div id="grid" data-mode="day" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+  <div class="mb-3 flex justify-end gap-2" aria-label="Hotel carousel controls">
+    <button id="scrollHotelsLeft" type="button" aria-label="Scroll hotels left" title="Previous hotels" disabled class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-[var(--trust-blue)] shadow-sm transition hover:border-[var(--alert-orange)] hover:text-[var(--alert-orange)] disabled:cursor-not-allowed disabled:opacity-35">
+      <svg aria-hidden="true" viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current"><path d="M15 18l-6-6 6-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button id="scrollHotelsRight" type="button" aria-label="Scroll hotels right" title="Next hotels" disabled class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-[var(--trust-blue)] shadow-sm transition hover:border-[var(--alert-orange)] hover:text-[var(--alert-orange)] disabled:cursor-not-allowed disabled:opacity-35">
+      <svg aria-hidden="true" viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current"><path d="M9 6l6 6-6 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
 
-    <!-- Card 1 -->
-    <a href="/hotels?slot=H3" target="_top" class="bg-white rounded-xl overflow-hidden border border-slate-200 flex flex-col hover:-translate-y-1 hover:shadow-lg transition">
-      <img src="https://images.pexels.com/photos/15273732/pexels-photo-15273732.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop" alt="Wide-angle photo of a clean, simple double room" class="w-full h-40 object-cover">
-      <div class="p-4 flex flex-col gap-2 flex-1">
-        <h3 class="font-display font-700 text-sm">Highway Junction — NH48</h3>
-        <p class="text-xs text-slate-400">4.2 km ahead · exit 214</p>
-        <span class="inline-block w-fit text-[10px] font-bold px-2 py-1 rounded" style="background:var(--badge-tint); color:var(--alert-orange-dark)">Waystay Assured: Clean sheets, RO water, family kit</span>
-        <div class="mt-auto pt-2">
-          <p class="slot-day font-led text-lg font-bold">₹449<span class="text-xs font-normal text-slate-400">/3 hrs</span></p>
-          <p class="slot-night font-led text-lg font-bold">₹1,399<span class="text-xs font-normal text-slate-400">/night</span></p>
-          <span class="block w-full mt-2 bg-[var(--trust-blue)] text-white text-sm font-semibold py-2 rounded-lg text-center">Select slot</span>
-        </div>
-      </div>
-    </a>
-
-    <!-- Card 2 -->
-    <a href="/hotels?slot=H3" target="_top" class="bg-white rounded-xl overflow-hidden border border-slate-200 flex flex-col hover:-translate-y-1 hover:shadow-lg transition">
-      <img src="https://images.pexels.com/photos/1454804/pexels-photo-1454804.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop" alt="Wide-angle photo of a clean bathroom" class="w-full h-40 object-cover">
-      <div class="p-4 flex flex-col gap-2 flex-1">
-        <h3 class="font-display font-700 text-sm">Riverside Byway Inn</h3>
-        <p class="text-xs text-slate-400">11.8 km ahead · NH19</p>
-        <span class="inline-block w-fit text-[10px] font-bold px-2 py-1 rounded" style="background:var(--badge-tint); color:var(--alert-orange-dark)">Waystay Assured: Clean sheets, RO water, family kit</span>
-        <div class="mt-auto pt-2">
-          <p class="slot-day font-led text-lg font-bold">₹399<span class="text-xs font-normal text-slate-400">/3 hrs</span></p>
-          <p class="slot-night font-led text-lg font-bold">₹1,199<span class="text-xs font-normal text-slate-400">/night</span></p>
-          <span class="block w-full mt-2 bg-[var(--trust-blue)] text-white text-sm font-semibold py-2 rounded-lg text-center">Select slot</span>
-        </div>
-      </div>
-    </a>
-
-    <!-- Card 3 -->
-    <a href="/hotels?slot=H3" target="_top" class="bg-white rounded-xl overflow-hidden border border-slate-200 flex flex-col hover:-translate-y-1 hover:shadow-lg transition">
-      <img src="https://images.pexels.com/photos/2029722/pexels-photo-2029722.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop" alt="Wide-angle photo of a twin-bed room" class="w-full h-40 object-cover">
-      <div class="p-4 flex flex-col gap-2 flex-1">
-        <h3 class="font-display font-700 text-sm">Trucker's Rest — Panipat Bypass</h3>
-        <p class="text-xs text-slate-400">2.1 km ahead · exit 87</p>
-        <span class="inline-block w-fit text-[10px] font-bold px-2 py-1 rounded" style="background:var(--badge-tint); color:var(--alert-orange-dark)">Waystay Assured: Clean sheets, RO water, family kit</span>
-        <div class="mt-auto pt-2">
-          <p class="slot-day font-led text-lg font-bold">₹349<span class="text-xs font-normal text-slate-400">/3 hrs</span></p>
-          <p class="slot-night font-led text-lg font-bold">₹999<span class="text-xs font-normal text-slate-400">/night</span></p>
-          <span class="block w-full mt-2 bg-[var(--trust-blue)] text-white text-sm font-semibold py-2 rounded-lg text-center">Select slot</span>
-        </div>
-      </div>
-    </a>
-
-    <!-- Card 4 -->
-    <a href="/hotels?slot=H3" target="_top" class="bg-white rounded-xl overflow-hidden border border-slate-200 flex flex-col hover:-translate-y-1 hover:shadow-lg transition">
-      <img src="https://images.pexels.com/photos/14580368/pexels-photo-14580368.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop" alt="Wide-angle photo of a family room" class="w-full h-40 object-cover">
-      <div class="p-4 flex flex-col gap-2 flex-1">
-        <h3 class="font-display font-700 text-sm">Border Point Stay — NH44</h3>
-        <p class="text-xs text-slate-400">18.4 km ahead · exit 302</p>
-        <span class="inline-block w-fit text-[10px] font-bold px-2 py-1 rounded" style="background:var(--badge-tint); color:var(--alert-orange-dark)">Waystay Assured: Clean sheets, RO water, family kit</span>
-        <div class="mt-auto pt-2">
-          <p class="slot-day font-led text-lg font-bold">₹499<span class="text-xs font-normal text-slate-400">/3 hrs</span></p>
-          <p class="slot-night font-led text-lg font-bold">₹1,599<span class="text-xs font-normal text-slate-400">/night</span></p>
-          <span class="block w-full mt-2 bg-[var(--trust-blue)] text-white text-sm font-semibold py-2 rounded-lg text-center">Select slot</span>
-        </div>
-      </div>
-    </a>
-
+  <div id="grid" data-mode="day" aria-label="Top-rated hotels by city" class="flex gap-5 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-4">
+    <div class="w-full shrink-0 rounded-xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-500" role="status">
+      Loading available stays…
+    </div>
   </div>
 </section>
 
@@ -380,7 +331,7 @@
       <h3 class="font-display font-700 text-sm text-white mb-3 uppercase tracking-wide">Waystay</h3>
       <ul class="space-y-2.5 text-sm">
         <li><a href="#trust" class="hover:text-white">Why travelers trust us</a></li>
-        <li><a href="/register" target="_top" class="hover:text-white">Partner your property</a></li>
+        <li><a href="/partner" target="_top" class="hover:text-white">Partner your property</a></li>
         <li><a href="mailto:waystayrooms@gmail.com" class="hover:text-white">Help centre</a></li>
         <li><a href="/hotels" target="_top" class="hover:text-white">Terms &amp; refund policy</a></li>
       </ul>
@@ -423,7 +374,7 @@
       const fullName = session.user.name || 'Account';
       const email = session.user.email || '';
       const initial = (fullName[0] || 'A').toUpperCase();
-      const partnerHref = session.user.role === 'OWNER' ? '/owner/hotels/new' : '/register?role=OWNER&returnTo=%2Fowner%2Fhotels%2Fnew';
+      const partnerHref = session.user.role === 'OWNER' ? '/owner/hotels/new' : '/partner';
       const avatar = session.user.avatarUrl
         ? `<img src="${session.user.avatarUrl}" alt="" class="h-8 w-8 rounded-full object-cover ring-2 ring-white">`
         : `<span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--trust-blue)] text-xs font-semibold text-white ring-2 ring-white">${initial}</span>`;
@@ -640,13 +591,145 @@
   // Velocity toggle
   const toggle = document.getElementById('velocityToggle');
   const grid = document.getElementById('grid');
+  const scrollHotelsLeft = document.getElementById('scrollHotelsLeft');
+  const scrollHotelsRight = document.getElementById('scrollHotelsRight');
+
+  function updateHotelScroller() {
+    if (!grid || !scrollHotelsLeft || !scrollHotelsRight) return;
+    const maxScrollLeft = Math.max(0, grid.scrollWidth - grid.clientWidth);
+    scrollHotelsLeft.disabled = grid.scrollLeft <= 4;
+    scrollHotelsRight.disabled = grid.scrollLeft >= maxScrollLeft - 4;
+  }
+
+  function scrollHotels(direction) {
+    if (!grid) return;
+    const firstCard = grid.querySelector('[data-hotel-id]');
+    const cardWidth = firstCard?.getBoundingClientRect().width || grid.clientWidth * 0.82;
+    grid.scrollBy({ left: direction * (cardWidth + 20), behavior: 'smooth' });
+  }
+
+  scrollHotelsLeft?.addEventListener('click', () => scrollHotels(-1));
+  scrollHotelsRight?.addEventListener('click', () => scrollHotels(1));
+  grid?.addEventListener('scroll', updateHotelScroller, { passive: true });
+  window.addEventListener('resize', updateHotelScroller);
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, character => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    })[character]);
+  }
+
+  function safeImageUrl(value) {
+    if (!value) return '/waystay-logo.png';
+
+    try {
+      const url = new URL(value, window.location.origin);
+      return ['http:', 'https:'].includes(url.protocol) ? url.href : '/waystay-logo.png';
+    } catch {
+      return '/waystay-logo.png';
+    }
+  }
+
+  function formatPrice(value) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(amount);
+  }
+
+  function updateHotelCardLinks(mode) {
+    const slot = mode === 'night' ? 'FULLDAY' : 'H3';
+    grid?.querySelectorAll('[data-hotel-id]').forEach(card => {
+      card.href = `/hotels/${encodeURIComponent(card.dataset.hotelId)}?slot=${slot}`;
+    });
+  }
+
+  async function hydrateOpenHotels() {
+    if (!grid) return;
+
+    grid.setAttribute('aria-busy', 'true');
+    try {
+      const response = await fetch('/api/search?slot=H3&minRating=4&limit=100', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Unable to load stays');
+
+      const data = await response.json();
+      const hotels = Array.isArray(data.hotels) ? data.hotels : [];
+      const cityCounts = new Map();
+      const hotelsToDisplay = hotels.filter(hotel => {
+        const cityKey = String(hotel.city || 'unknown').trim().toLocaleLowerCase();
+        const count = cityCounts.get(cityKey) || 0;
+        if (count >= 2) return false;
+        cityCounts.set(cityKey, count + 1);
+        return true;
+      });
+
+      if (hotelsToDisplay.length === 0) {
+        grid.innerHTML = `
+          <div class="w-full shrink-0 rounded-xl border border-slate-200 bg-white px-5 py-8 text-center">
+            <p class="font-display font-700 text-slate-700">No approved 4-star stays are available right now.</p>
+            <a href="/hotels" target="_top" class="mt-3 inline-block text-sm font-bold text-[var(--trust-blue)] hover:text-[var(--alert-orange)]">Browse all stays</a>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = hotelsToDisplay.map(hotel => {
+        const dayPrice = formatPrice(hotel.selectedSlotPrice ?? hotel.price3h);
+        const nightPrice = formatPrice(hotel.priceFullDay);
+        const location = [hotel.city, hotel.state].filter(Boolean).join(', ') || 'Location available on request';
+        const rating = Number(hotel.avgRating) > 0
+          ? ` · ${Number(hotel.avgRating).toFixed(1)} ★ (${Number(hotel.reviewCount) || 0})`
+          : '';
+
+        return `
+          <a href="/hotels/${encodeURIComponent(hotel.id)}?slot=H3" data-hotel-id="${escapeHtml(hotel.id)}" target="_top" class="w-[82vw] max-w-sm sm:w-80 shrink-0 snap-start bg-white rounded-xl overflow-hidden border border-slate-200 flex flex-col hover:-translate-y-1 hover:shadow-lg transition">
+            <img src="${escapeHtml(safeImageUrl(hotel.image))}" onerror="this.onerror=null;this.src='/waystay-logo.png'" alt="${escapeHtml(hotel.name)}" class="w-full h-40 object-cover">
+            <div class="p-4 flex flex-col gap-2 flex-1">
+              <h3 class="font-display font-700 text-sm">${escapeHtml(hotel.name)}</h3>
+              <p class="text-xs text-slate-400">${escapeHtml(location + rating)}</p>
+              <span class="inline-block w-fit text-[10px] font-bold px-2 py-1 rounded" style="background:var(--badge-tint); color:var(--alert-orange-dark)">Waystay Assured: 4★+ approved property</span>
+              <div class="mt-auto pt-2">
+                <p class="slot-day font-led text-lg font-bold">${dayPrice ? `${escapeHtml(dayPrice)}<span class="text-xs font-normal text-slate-400">/3 hrs</span>` : '<span class="text-sm">Price on request</span>'}</p>
+                <p class="slot-night font-led text-lg font-bold">${nightPrice ? `${escapeHtml(nightPrice)}<span class="text-xs font-normal text-slate-400">/night</span>` : '<span class="text-sm">Price on request</span>'}</p>
+                <span class="block w-full mt-2 bg-[var(--trust-blue)] text-white text-sm font-semibold py-2 rounded-lg text-center">Select slot</span>
+              </div>
+            </div>
+          </a>
+        `;
+      }).join('');
+
+      updateHotelCardLinks(grid.dataset.mode);
+    } catch {
+      grid.innerHTML = `
+        <div class="w-full shrink-0 rounded-xl border border-red-100 bg-red-50 px-5 py-8 text-center">
+          <p class="font-display font-700 text-slate-700">We could not load the available stays.</p>
+          <button type="button" id="retryOpenHotels" class="mt-3 text-sm font-bold text-[var(--trust-blue)] hover:text-[var(--alert-orange)]">Try again</button>
+        </div>
+      `;
+      document.getElementById('retryOpenHotels')?.addEventListener('click', hydrateOpenHotels);
+    } finally {
+      grid.removeAttribute('aria-busy');
+      window.requestAnimationFrame(updateHotelScroller);
+    }
+  }
+
   toggle.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const mode = btn.dataset.set;
       toggle.querySelectorAll('.tab-btn').forEach(b => b.dataset.active = (b === btn) ? 'true' : 'false');
       grid.dataset.mode = mode;
+      updateHotelCardLinks(mode);
     });
   });
+
+  hydrateOpenHotels();
 
   // Geolocation CTA
   const locateBtn = document.getElementById('locateBtn');

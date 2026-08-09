@@ -17,7 +17,7 @@ export default function BrandLogo({
   textClassName = 'text-xl font-normal tracking-tight',
 }: BrandLogoProps) {
   return (
-    <Link href={href} className={className}>
+    <Link href={href} aria-label="Go to Waystay home" className={`${className} relative z-10 cursor-pointer`}>
       <Image
         src="/waystay-logo.png"
         alt="Waystay"

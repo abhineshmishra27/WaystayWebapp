@@ -5,7 +5,12 @@ import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({
-    connectionString: process.env.DATABASE_URL ?? '',
+    connectionString:
+      process.env.WAYSTAY_DATABASE_URL_UNPOOLED ??
+      process.env.WAYSTAY_DATABASE_URL ??
+      process.env.DIRECT_URL ??
+      process.env.DATABASE_URL ??
+      '',
   }),
 })
 

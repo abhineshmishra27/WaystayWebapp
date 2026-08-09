@@ -45,7 +45,13 @@ export async function GET(req: NextRequest) {
     }
     const requestedPage = parseInt(searchParams.get('page') || '1', 10)
     const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1
-    const limit = 20
+    const requestedLimit = parseInt(searchParams.get('limit') || '20', 10)
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 20
+    const minRatingParam = searchParams.get('minRating')
+    const minRating = minRatingParam === null ? null : parseFloat(minRatingParam)
+    if (minRating !== null && (!Number.isFinite(minRating) || minRating < 0 || minRating > 5)) {
+      return NextResponse.json({ error: 'minRating must be between 0 and 5' }, { status: 400 })
+    }
     const skip = (page - 1) * limit
     const distanceByHotelId = new Map<string, number>()
 
@@ -66,6 +72,15 @@ export async function GET(req: NextRequest) {
         },
       },
     })
+
+    const ratingByHotelId = new Map(
+      hotels.map(hotel => [
+        hotel.id,
+        hotel.reviews.length > 0
+          ? hotel.reviews.reduce((sum, review) => sum + review.rating, 0) / hotel.reviews.length
+          : hotel.rating_avg,
+      ]),
+    )
 
     if (hasCoords && lat !== null && lng !== null) {
       hotels = hotels
@@ -104,6 +119,12 @@ export async function GET(req: NextRequest) {
       filteredHotels = hotels.filter(hotel => availableHotelIds.includes(hotel.id))
     }
 
+    if (minRating !== null) {
+      filteredHotels = filteredHotels
+        .filter(hotel => (ratingByHotelId.get(hotel.id) ?? 0) >= minRating)
+        .sort((a, b) => (ratingByHotelId.get(b.id) ?? 0) - (ratingByHotelId.get(a.id) ?? 0))
+    }
+
     const totalCount = filteredHotels.length
     const paginatedHotels = filteredHotels.slice(skip, skip + limit)
 
@@ -126,11 +147,8 @@ export async function GET(req: NextRequest) {
       lat: hotel.lat,
       lng: hotel.lng,
       image: hotel.images[0]?.url || null,
-      avgRating:
-        hotel.reviews.length > 0
-          ? hotel.reviews.reduce((sum, review) => sum + review.rating, 0) / hotel.reviews.length
-          : 0,
-      reviewCount: hotel.reviews.length,
+      avgRating: ratingByHotelId.get(hotel.id) ?? 0,
+      reviewCount: hotel.reviews.length || hotel.total_review,
       pricePerHour: hotel.rooms[0]?.pricePerHour || null,
       price3h: hotel.rooms[0]?.price_3h || null,
       price6h: hotel.rooms[0]?.price_6h || null,

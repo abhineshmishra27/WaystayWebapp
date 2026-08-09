@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   const { success } = rateLimit(`otp:${parsed.data.purpose}:${ip}:${identifier}`, 5, 15 * 60 * 1000)
   if (!success) return NextResponse.json({ error: 'Too many OTP requests. Try again later.' }, { status: 429 })
 
-  const { code } = createOtpChallenge(identifier, parsed.data.purpose)
+  const { code } = await createOtpChallenge(identifier, parsed.data.purpose)
   // Wire the returned targets to the SMS/email provider in production.
   return NextResponse.json({
     message: 'OTP sent successfully',

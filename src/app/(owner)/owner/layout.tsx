@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import BrandLogo from '@/components/BrandLogo'
 import LogoutButton from '@/components/LogoutButton'
 
 export default async function OwnerLayout({ children }: { children: ReactNode }) {
@@ -21,8 +20,7 @@ export default async function OwnerLayout({ children }: { children: ReactNode })
     <div className="flex min-h-screen bg-gray-50">
       <aside className="w-60 bg-white border-r border-gray-100 flex flex-col fixed h-full">
         <div className="p-5 border-b border-gray-100">
-          <BrandLogo portalLabel="Owner Portal" textClassName="text-xl font-normal tracking-tight" />
-          <p className="text-xs text-gray-400 mt-0.5">Owner Portal</p>
+          <p className="text-base font-semibold text-gray-800">Owner Portal</p>
         </div>
         <nav className="flex-1 p-4 space-y-1">
           {navLinks.map(l => (

@@ -1,18 +1,19 @@
 'use client'
 import { Suspense, useEffect, useState } from 'react'
-import { getProviders, signIn } from 'next-auth/react'
+import { getProviders, signIn, useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import toast, { Toaster } from 'react-hot-toast'
 
 function getAuthRedirect(returnTo: string | null) {
-  if (!returnTo || returnTo === '/') return '/hotels'
-  return returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/hotels'
+  if (!returnTo || returnTo === '/' || returnTo === '/hotels' || returnTo.startsWith('/hotels?')) return '/'
+  return returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/'
 }
 
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { status } = useSession()
   const [method, setMethod] = useState<'password' | 'otp'>('password')
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -22,6 +23,7 @@ function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [googleEnabled, setGoogleEnabled] = useState(false)
   const [cooldown, setCooldown] = useState(0)
+  const [signInError, setSignInError] = useState('')
 
   const registered = searchParams.get('registered') === 'true' || searchParams.has('registered')
   const unauthorized = searchParams.get('error') === 'unauthorized'
@@ -34,6 +36,13 @@ function LoginForm() {
   useEffect(() => {
     getProviders().then(providers => setGoogleEnabled(Boolean(providers?.google))).catch(() => setGoogleEnabled(false))
   }, [])
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      router.replace(redirectTo)
+      router.refresh()
+    }
+  }, [redirectTo, router, status])
 
   const selectMethod = (next: 'password' | 'otp') => {
     setMethod(next)
@@ -65,29 +74,43 @@ function LoginForm() {
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    setSignInError('')
     if (!validIdentifier) return toast.error('Enter a valid email or 10-digit mobile number.')
     if (method === 'password' && !password) return toast.error('Enter your password.')
     if (method === 'otp' && !/^\d{6}$/.test(otp)) return toast.error('Enter the 6-digit OTP.')
     setLoading(true)
-    const result = await signIn('credentials', {
-      identifier,
-      password: method === 'password' ? password : undefined,
-      otp: method === 'otp' ? otp : undefined,
-      redirect: false,
-      redirectTo,
-    })
-    setLoading(false)
-    if (!result?.ok) {
-      toast.error(method === 'otp' ? 'Incorrect or expired OTP.' : 'Invalid email/mobile or password')
-      return
+    try {
+      const result = await signIn('credentials', {
+        identifier,
+        password: method === 'password' ? password : undefined,
+        otp: method === 'otp' ? otp : undefined,
+        redirect: false,
+        redirectTo,
+      })
+      if (!result?.ok || result.error || !result.url) {
+        const message = method === 'otp' ? 'Incorrect or expired OTP.' : 'Incorrect username or password.'
+        setSignInError(message)
+        toast.error(message)
+        return
+      }
+      router.replace(redirectTo)
+      router.refresh()
+    } catch {
+      const message = 'Sign in could not be completed. Please try again.'
+      setSignInError(message)
+      toast.error(message)
+    } finally {
+      setLoading(false)
     }
-    router.replace(redirectTo)
-    router.refresh()
   }
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true)
     await signIn('google', { redirectTo })
+  }
+
+  if (status === 'loading' || status === 'authenticated') {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-sm text-gray-500">Taking you to Waystay…</div>
   }
 
   return (
@@ -100,6 +123,7 @@ function LoginForm() {
         {registered && <div className="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg p-3 mb-4">Account created! You can now sign in.</div>}
         {unauthorized && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">You do not have permission to access that page.</div>}
         {authError && authError !== 'unauthorized' && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">Google sign-in could not be completed. Please try again.</div>}
+        {signInError && <div role="alert" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">{signInError}</div>}
 
         {googleEnabled && <>
           <button type="button" onClick={handleGoogleSignIn} disabled={googleLoading || loading} className="w-full border border-gray-200 bg-white text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-3">

@@ -10,6 +10,10 @@ export default defineConfig({
     seed: "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
+    url:
+      process.env["WAYSTAY_DATABASE_URL_UNPOOLED"] ??
+      process.env["WAYSTAY_DATABASE_URL"] ??
+      process.env["DIRECT_URL"] ??
+      process.env["DATABASE_URL"],
   },
 });

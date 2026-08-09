@@ -24,12 +24,14 @@ const schema = z.object({
 
 type FormInput = z.input<typeof schema>
 type FormData = z.output<typeof schema>
+type UploadedHotelImage = { url: string; publicId: string }
 
 export default function NewHotelPage() {
   const router = useRouter()
   const [step, setStep] = useState(1)
   const [amenities, setAmenities] = useState<string[]>([])
-  const [images, setImages] = useState<{ url: string; publicId: string }[]>([])
+  const [images, setImages] = useState<UploadedHotelImage[]>([])
+  const [mainPhotoPublicId, setMainPhotoPublicId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
@@ -51,17 +53,35 @@ export default function NewHotelPage() {
 
   const handleImageUpload = async (files: FileList) => {
     setUploading(true)
-    for (const file of Array.from(files)) {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('folder', 'hotels')
-      const res = await fetch('/api/upload', { method: 'POST', body: fd })
-      if (res.ok) {
-        const data = await res.json()
-        setImages(prev => [...prev, { url: data.url, publicId: data.publicId }])
+    const uploadedImages: UploadedHotelImage[] = []
+
+    try {
+      for (const file of Array.from(files)) {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('folder', 'hotels')
+        const res = await fetch('/api/upload', { method: 'POST', body: fd })
+        if (res.ok) {
+          const data = await res.json()
+          uploadedImages.push({ url: data.url, publicId: data.publicId })
+        } else {
+          toast.error(`Could not upload ${file.name}`)
+        }
       }
+
+      if (uploadedImages.length > 0) {
+        setImages(prev => [...prev, ...uploadedImages])
+        setMainPhotoPublicId(prev => prev ?? uploadedImages[0].publicId)
+      }
+    } finally {
+      setUploading(false)
     }
-    setUploading(false)
+  }
+
+  const removeImage = (publicId: string) => {
+    const remainingImages = images.filter(image => image.publicId !== publicId)
+    setImages(remainingImages)
+    setMainPhotoPublicId(current => current === publicId ? remainingImages[0]?.publicId ?? null : current)
   }
 
   const onSubmit = async (data: FormData) => {
@@ -69,11 +89,21 @@ export default function NewHotelPage() {
       toast.error('Add at least one photo')
       return
     }
+    if (!mainPhotoPublicId || !images.some(image => image.publicId === mainPhotoPublicId)) {
+      toast.error('Choose the main hotel photo')
+      return
+    }
+
+    const orderedImages = [
+      ...images.filter(image => image.publicId === mainPhotoPublicId),
+      ...images.filter(image => image.publicId !== mainPhotoPublicId),
+    ]
+
     setSubmitting(true)
     const res = await fetch('/api/hotels', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, amenities, imageUrls: images }),
+      body: JSON.stringify({ ...data, amenities, imageUrls: orderedImages }),
     })
     if (res.ok) {
       toast.success('Hotel submitted for admin approval!')
@@ -250,20 +280,41 @@ export default function NewHotelPage() {
               <p className="text-gray-500 text-sm">{uploading ? 'Uploading...' : 'Click to upload photos (max 5MB each)'}</p>
             </label>
             {images.length > 0 && (
-              <div className="grid grid-cols-3 gap-3">
-                {images.map((img, i) => (
-                  <div key={i} className="relative group">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={img.url} alt="Hotel" className="w-full h-24 object-cover rounded-lg" />
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-800">Uploaded photos</h3>
+                  <p className="mt-0.5 text-xs text-gray-500">Choose one photo as the main image shown in hotel listings.</p>
+                </div>
+                {images.map((img, i) => {
+                  const isMain = img.publicId === mainPhotoPublicId
+                  return (
+                  <div key={img.publicId} className={`flex items-center gap-3 rounded-xl border p-3 transition-colors ${isMain ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}`}>
+                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                      <input
+                        type="radio"
+                        name="mainHotelPhoto"
+                        checked={isMain}
+                        onChange={() => setMainPhotoPublicId(img.publicId)}
+                        className="h-4 w-4 shrink-0 accent-indigo-600"
+                      />
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img.url} alt={`Hotel upload ${i + 1}`} className="h-20 w-28 shrink-0 rounded-lg object-cover" />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-gray-800">Photo {i + 1}</span>
+                        <span className="block text-xs text-gray-500">{isMain ? 'Main hotel photo' : 'Select as main photo'}</span>
+                      </span>
+                    </label>
                     <button
                       type="button"
-                      onClick={() => setImages(prev => prev.filter((_, idx) => idx !== i))}
-                      className="absolute top-1 right-1 bg-red-500 text-white w-5 h-5 rounded-full text-xs hidden group-hover:flex items-center justify-center"
+                      onClick={() => removeImage(img.publicId)}
+                      aria-label={`Remove photo ${i + 1}`}
+                      className="shrink-0 rounded-lg px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
                     >
-                      ×
+                      Remove
                     </button>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
             <div className="flex gap-3">

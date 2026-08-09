@@ -39,6 +39,19 @@ export default function Header() {
 
   if (pathname === '/') return null
 
+  if (pathname.startsWith('/partner')) {
+    return (
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+          <BrandLogo className="flex shrink-0 items-center gap-2" />
+          <Link href="/" className="text-sm font-semibold text-slate-600 transition hover:text-[var(--waystay-orange)]">
+            Back to traveler site
+          </Link>
+        </div>
+      </header>
+    )
+  }
+
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">

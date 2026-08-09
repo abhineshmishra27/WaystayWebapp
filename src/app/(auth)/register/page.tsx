@@ -1,6 +1,6 @@
 'use client'
-import { Suspense, useState } from 'react'
-import { signIn } from 'next-auth/react'
+import { Suspense, useEffect, useState } from 'react'
+import { signIn, useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import toast, { Toaster } from 'react-hot-toast'
@@ -8,13 +8,25 @@ import toast, { Toaster } from 'react-hot-toast'
 type Method = 'password' | 'otp'
 
 function RegisterForm() {
-  const router = useRouter(); const params = useSearchParams(); const redirectTo = params.get('returnTo')?.startsWith('/') && !params.get('returnTo')?.startsWith('//') ? params.get('returnTo')! : '/hotels'
+  const router = useRouter(); const params = useSearchParams()
+  const { status } = useSession()
   const [method, setMethod] = useState<Method>('password')
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '', role: 'CUSTOMER' })
   const [otp, setOtp] = useState(''); const [sent, setSent] = useState(false); const [loading, setLoading] = useState(false); const [cooldown, setCooldown] = useState(0)
+  const requestedReturnTo = params.get('returnTo')
+  const redirectTo = requestedReturnTo?.startsWith('/') && !requestedReturnTo.startsWith('//')
+    ? requestedReturnTo
+    : form.role === 'OWNER' ? '/owner/hotels/new' : '/'
   const update = (key: string, value: string) => setForm(current => ({ ...current, [key]: value }))
   const validDetails = form.name.trim().length >= 2 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) && /^[6-9]\d{9}$/.test(form.phone)
   const validPassword = form.password.length >= 8 && /[A-Z]/.test(form.password) && /[0-9]/.test(form.password) && form.password === form.confirmPassword
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      router.replace(redirectTo)
+      router.refresh()
+    }
+  }, [redirectTo, router, status])
 
   const sendOtp = async () => {
     if (!validDetails) return toast.error('Complete your name, email, and mobile number first.')
@@ -28,10 +40,11 @@ function RegisterForm() {
     if (method === 'password' && !validPassword) return toast.error('Use an 8+ character password with an uppercase letter and number.')
     if (method === 'otp' && !/^\d{6}$/.test(otp)) return toast.error('Enter the 6-digit OTP.')
     setLoading(true)
-    try { const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, email: form.email, phone: form.phone, role: form.role, ...(method === 'password' ? { password: form.password } : { otp }) }) }); const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Registration failed'); if (method === 'otp') { router.replace(`/login?registered=true&returnTo=${encodeURIComponent(redirectTo)}`); router.refresh(); return } const result = await signIn('credentials', { identifier: form.email, password: form.password, redirect: false, redirectTo }); if (!result?.ok) router.replace(`/login?registered=true&returnTo=${encodeURIComponent(redirectTo)}`); else { router.replace(redirectTo); router.refresh() } } catch (error) { toast.error(error instanceof Error ? error.message : 'Unable to create account.') } finally { setLoading(false) }
+    try { const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, email: form.email, phone: form.phone, role: form.role, ...(method === 'password' ? { password: form.password } : { otp }) }) }); const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Registration failed'); if (typeof data.registrationToken !== 'string') throw new Error('Account created, but automatic sign-in could not be started.'); const result = await signIn('credentials', { registrationToken: data.registrationToken, redirect: false, redirectTo }); if (!result?.ok || result.error || !result.url) throw new Error('Account created, but automatic sign-in failed. Please use the sign-in page.'); router.replace(redirectTo); router.refresh() } catch (error) { toast.error(error instanceof Error ? error.message : 'Unable to create account.') } finally { setLoading(false) }
   }
 
   const chooseMethod = (next: Method) => { setMethod(next); setSent(false); setOtp('') }
+  if (status === 'loading' || status === 'authenticated') return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-sm text-gray-500">Taking you to Waystay…</div>
   return <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8"><Toaster /><div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 w-full max-w-md"><h1 className="text-2xl font-semibold text-gray-900 mb-2">Create account</h1><p className="text-gray-500 text-sm mb-6">Join WayStayy today</p>
     <form onSubmit={createAccount} className="space-y-4"><div className="flex rounded-lg bg-gray-100 p-1 gap-1"><button type="button" onClick={() => chooseMethod('password')} className={`flex-1 py-2 rounded-md text-sm font-medium ${method === 'password' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>Password</button><button type="button" onClick={() => chooseMethod('otp')} className={`flex-1 py-2 rounded-md text-sm font-medium ${method === 'otp' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>OTP</button></div>
       <p className="text-xs text-gray-500">{method === 'password' ? 'Create an account with a password.' : 'Create an account using a one-time code sent to your mobile.'}</p>

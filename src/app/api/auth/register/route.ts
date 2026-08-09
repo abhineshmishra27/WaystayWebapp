@@ -4,6 +4,7 @@ import { rateLimit } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { normalizePhone, verifyOtp } from '@/lib/otp'
+import { createRegistrationLoginToken } from '@/lib/registration-login-token'
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     const { name, password, role, otp } = parsed.data
     const phone = normalizePhone(parsed.data.phone)
-    if (otp && !verifyOtp(phone, 'register', otp)) {
+    if (otp && !await verifyOtp(phone, 'register', otp)) {
       return NextResponse.json({ error: 'Incorrect or expired OTP. Request a new code.' }, { status: 400 })
     }
     const email = parsed.data.email.trim().toLowerCase()
@@ -72,7 +73,11 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json(
-      { message: 'Account created successfully', user },
+      {
+        message: 'Account created successfully',
+        user,
+        registrationToken: createRegistrationLoginToken(user.id),
+      },
       { status: 201 }
     )
   } catch (error) {

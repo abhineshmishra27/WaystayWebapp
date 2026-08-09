@@ -69,6 +69,18 @@ model User {
   auditLogs     AuditLog[]
 }
 
+model OtpChallenge {
+  id          String   @id @default(cuid())
+  identifier  String
+  purpose     String
+  codeHash    String
+  expiresAt   DateTime
+  attempts    Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([identifier, purpose, createdAt])
+}
+
 model Hotel {
   id            String    @id @default(cuid())
   ownerId       String

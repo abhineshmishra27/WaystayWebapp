@@ -3,6 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import GoogleProvider from 'next-auth/providers/google'
 import type { Role } from '@prisma/client'
 import { normalizeIdentifier, verifyOtp } from '@/lib/otp'
+import { verifyRegistrationLoginToken } from '@/lib/registration-login-token'
 
 const ROLES: readonly Role[] = ['ADMIN', 'OWNER', 'CUSTOMER']
 const googleAuthEnabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET)
@@ -24,15 +25,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         identifier: { label: 'Email or mobile', type: 'text' },
         phone: { label: 'Mobile number', type: 'tel' },
         otp: { label: 'OTP', type: 'text' },
+        registrationToken: { label: 'Registration token', type: 'text' },
+        requiredRole: { label: 'Required role', type: 'text' },
       },
       async authorize(credentials) {
+        if (credentials?.registrationToken) {
+          const userId = verifyRegistrationLoginToken(String(credentials.registrationToken))
+          if (!userId) return null
+
+          const { prisma } = await import('@/lib/db')
+          const user = await prisma.user.findFirst({ where: { id: userId, isActive: true } })
+          if (!user || (credentials.requiredRole && user.role !== credentials.requiredRole)) return null
+          return { id: user.id, email: user.email, name: user.name, role: user.role, avatarUrl: user.avatarUrl }
+        }
         if (credentials?.identifier && credentials?.otp) {
           const identifier = normalizeIdentifier(String(credentials.identifier))
-          if (!verifyOtp(identifier, 'login', String(credentials.otp))) return null
+          if (!await verifyOtp(identifier, 'login', String(credentials.otp))) return null
 
           const { prisma } = await import('@/lib/db')
           const user = await prisma.user.findFirst({ where: { isActive: true, OR: [{ email: identifier }, { phone: identifier }] } })
-          if (!user) return null
+          if (!user || (credentials.requiredRole && user.role !== credentials.requiredRole)) return null
           return { id: user.id, email: user.email, name: user.name, role: user.role, avatarUrl: user.avatarUrl }
         }
         if (!credentials?.identifier || !credentials?.password) return null
@@ -44,6 +56,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await prisma.user.findFirst({ where: { isActive: true, OR: [{ email: identifier }, { phone: identifier }] } })
 
         if (!user || !user.isActive) return null
+        if (credentials.requiredRole && user.role !== credentials.requiredRole) return null
 
         const isValid = await bcrypt.compare(
           credentials.password as string,

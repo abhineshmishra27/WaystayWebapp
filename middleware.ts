@@ -22,6 +22,10 @@ export default async function middleware(req: NextRequest) {
   const role = await getRole(req)
   const returnTo = `${pathname}${search}`
 
+  if ((pathname === '/login' || pathname === '/register') && role) {
+    return NextResponse.redirect(new URL('/', req.url))
+  }
+
   if (pathname.startsWith('/admin')) {
     if (!role || role !== 'ADMIN') {
       return NextResponse.redirect(new URL('/login?error=unauthorized', req.url))
@@ -62,5 +66,7 @@ export const config = {
     '/dashboard/:path*',
     '/booking/:path*',
     '/payment/:path*',
+    '/login',
+    '/register',
   ],
 }
