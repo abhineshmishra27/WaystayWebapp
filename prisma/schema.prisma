@@ -55,7 +55,9 @@ model User {
   email         String    @unique
   passwordHash  String
   name          String
-  phone         String?
+  phone         String?   @unique
+  firebaseUid   String?   @unique
+  phoneVerifiedAt DateTime?
   role          Role      @default(CUSTOMER)
   avatarUrl     String?
   isActive      Boolean   @default(true)

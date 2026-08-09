@@ -152,11 +152,37 @@ RAZORPAY_KEY_SECRET="xxxxx"
 NEXT_PUBLIC_RAZORPAY_KEY_ID="rzp_test_xxxxx"
 
 RESEND_API_KEY="re_xxxxx"
+OTP_EMAIL_FROM="Waystay <noreply@waystay.co.in>"
+EMAIL_FROM="Waystay <noreply@waystay.co.in>"
+
+FIREBASE_PROJECT_ID="your-firebase-project-id"
+NEXT_PUBLIC_FIREBASE_API_KEY="your-firebase-web-api-key"
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="your-project.firebaseapp.com"
+NEXT_PUBLIC_FIREBASE_PROJECT_ID="your-firebase-project-id"
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="your-project.firebasestorage.app"
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="your-messaging-sender-id"
+NEXT_PUBLIC_FIREBASE_APP_ID="your-firebase-web-app-id"
+
+# Local development only. Never enable this in production.
+OTP_DEMO_MODE="true"
 
 CLOUDINARY_CLOUD_NAME="xxxxx"
 CLOUDINARY_API_KEY="xxxxx"
 CLOUDINARY_API_SECRET="xxxxx"
 ```
+
+## OTP Login Setup
+
+1. Add and verify the Waystay sending domain in Resend, create an API key, and set `RESEND_API_KEY` and `OTP_EMAIL_FROM` for email OTP.
+2. Register a Firebase web app, enable the Phone provider, and allow the website's production domains in Firebase Authentication settings.
+3. Add the Firebase web configuration variables above to local and deployment environments. These identify the Firebase app and are intentionally exposed to the browser.
+4. Link a billing account and use the Blaze plan; Firebase sends verification SMS only on pay-as-you-go projects.
+5. Restrict the Firebase SMS region policy to the countries Waystay serves. The current project permits India only.
+6. Keep `OTP_DEMO_MODE` unset in production. It applies only to the Resend-backed email OTP flow during local development.
+7. Apply migrations with `npx prisma migrate deploy` and deploy the application.
+8. Test email OTP and mobile OTP using separate registered accounts.
+
+Email OTP challenges expire after 10 minutes, permit at most five verification attempts, and are stored only as keyed hashes. Firebase sends and verifies mobile OTPs; the server independently verifies the Firebase ID token before creating a Waystay session. Email, mobile number, and Firebase UID uniqueness are enforced in PostgreSQL.
 
 ## Local Setup
 

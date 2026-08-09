@@ -13,7 +13,8 @@ export default function Header() {
   const menuRef = useRef<HTMLDivElement>(null)
 
   const firstName = session?.user.name?.split(' ')[0] || 'Account'
-  const returnTo = encodeURIComponent(pathname || '/')
+  const authDestination = pathname === '/login' || pathname === '/register' ? '/' : pathname || '/'
+  const returnTo = encodeURIComponent(authDestination)
 
   useEffect(() => {
     if (!menuOpen) return

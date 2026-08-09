@@ -4,6 +4,7 @@ import GoogleProvider from 'next-auth/providers/google'
 import type { Role } from '@prisma/client'
 import { normalizeIdentifier, verifyOtp } from '@/lib/otp'
 import { verifyRegistrationLoginToken } from '@/lib/registration-login-token'
+import { verifyFirebasePhoneIdToken } from '@/lib/firebase-admin'
 
 const ROLES: readonly Role[] = ['ADMIN', 'OWNER', 'CUSTOMER']
 const googleAuthEnabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET)
@@ -25,6 +26,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         identifier: { label: 'Email or mobile', type: 'text' },
         phone: { label: 'Mobile number', type: 'tel' },
         otp: { label: 'OTP', type: 'text' },
+        firebaseIdToken: { label: 'Firebase ID token', type: 'text' },
         registrationToken: { label: 'Registration token', type: 'text' },
         requiredRole: { label: 'Required role', type: 'text' },
       },
@@ -36,6 +38,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const { prisma } = await import('@/lib/db')
           const user = await prisma.user.findFirst({ where: { id: userId, isActive: true } })
           if (!user || (credentials.requiredRole && user.role !== credentials.requiredRole)) return null
+          return { id: user.id, email: user.email, name: user.name, role: user.role, avatarUrl: user.avatarUrl }
+        }
+        if (credentials?.firebaseIdToken) {
+          let verifiedPhone: Awaited<ReturnType<typeof verifyFirebasePhoneIdToken>>
+          try {
+            verifiedPhone = await verifyFirebasePhoneIdToken(String(credentials.firebaseIdToken))
+          } catch {
+            return null
+          }
+
+          const { prisma } = await import('@/lib/db')
+          const user = await prisma.user.findUnique({ where: { phone: verifiedPhone.phone } })
+          if (!user?.isActive || (credentials.requiredRole && user.role !== credentials.requiredRole)) return null
+          if (user.firebaseUid && user.firebaseUid !== verifiedPhone.uid) return null
+
+          const uidOwner = await prisma.user.findUnique({ where: { firebaseUid: verifiedPhone.uid } })
+          if (uidOwner && uidOwner.id !== user.id) return null
+
+          if (!user.firebaseUid || !user.phoneVerifiedAt) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: {
+                firebaseUid: verifiedPhone.uid,
+                phoneVerifiedAt: user.phoneVerifiedAt ?? new Date(),
+              },
+            })
+          }
+
           return { id: user.id, email: user.email, name: user.name, role: user.role, avatarUrl: user.avatarUrl }
         }
         if (credentials?.identifier && credentials?.otp) {
@@ -87,10 +117,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account, profile }) {
       if (account?.provider !== 'google') return true
       if (!user.email || profile?.email_verified !== true) return false
+      const email = user.email.trim().toLowerCase()
 
       const { prisma } = await import('@/lib/db')
       const existingUser = await prisma.user.findUnique({
-        where: { email: user.email },
+        where: { email },
       })
 
       if (existingUser && !existingUser.isActive) return false
@@ -113,8 +144,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       await prisma.user.create({
         data: {
-          email: user.email,
-          name: user.name || user.email.split('@')[0],
+          email,
+          name: user.name || email.split('@')[0],
           passwordHash,
           role: 'CUSTOMER',
           avatarUrl: user.image,

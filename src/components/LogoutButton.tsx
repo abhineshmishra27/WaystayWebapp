@@ -1,6 +1,7 @@
 'use client'
 
 import { signOut } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 type LogoutButtonProps = {
@@ -8,12 +9,14 @@ type LogoutButtonProps = {
 }
 
 export default function LogoutButton({ className = 'text-xs text-red-500 mt-2 hover:underline' }: LogoutButtonProps) {
+  const router = useRouter()
   const [isSigningOut, setIsSigningOut] = useState(false)
 
   const handleSignOut = async () => {
     setIsSigningOut(true)
     await signOut({ redirect: false })
-    window.location.assign('/')
+    router.replace('/')
+    router.refresh()
   }
 
   return (

@@ -1,6 +1,6 @@
 import { Resend } from 'resend'
 
-const FROM = 'WayStayy <noreply@waystayy.com>'
+const FROM = process.env.EMAIL_FROM || 'Waystay <noreply@waystay.co.in>'
 type EmailPayload = Parameters<Resend['emails']['send']>[0]
 
 function getResend() {

@@ -24,8 +24,7 @@ export default function PartnerPortalPage() {
 
   useEffect(() => {
     if (status === 'authenticated' && session.user.role === 'OWNER') {
-      router.replace(OWNER_DESTINATION)
-      router.refresh()
+      window.location.replace(OWNER_DESTINATION)
     }
   }, [router, session, status])
 
@@ -61,8 +60,7 @@ export default function PartnerPortalPage() {
         return
       }
 
-      router.replace(OWNER_DESTINATION)
-      router.refresh()
+      window.location.replace(OWNER_DESTINATION)
     } catch {
       toast.error('Owner sign-in could not be completed. Please try again.')
     } finally {
@@ -112,8 +110,7 @@ export default function PartnerPortalPage() {
         throw new Error('Account created, but automatic sign-in failed. Please sign in.')
       }
 
-      router.replace(OWNER_DESTINATION)
-      router.refresh()
+      window.location.replace(OWNER_DESTINATION)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Owner account could not be created.')
     } finally {

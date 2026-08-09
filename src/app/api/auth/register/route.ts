@@ -3,18 +3,19 @@ import { prisma } from '@/lib/db'
 import { rateLimit } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
-import { normalizePhone, verifyOtp } from '@/lib/otp'
+import { normalizePhone } from '@/lib/otp'
 import { createRegistrationLoginToken } from '@/lib/registration-login-token'
+import { verifyFirebasePhoneIdToken } from '@/lib/firebase-admin'
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
   phone: z.string().min(10, 'Phone must be at least 10 digits'),
-  otp: z.string().regex(/^\d{6}$/, 'Enter the 6-digit OTP').optional(),
+  firebaseIdToken: z.string().min(100).optional(),
   password: z.string().optional(),
   role: z.enum(['OWNER', 'CUSTOMER']),
 }).superRefine((data, ctx) => {
-  if (data.otp) return
+  if (data.firebaseIdToken) return
   if (!data.password || data.password.length < 8 || !/[A-Z]/.test(data.password) || !/[0-9]/.test(data.password)) {
     ctx.addIssue({ code: 'custom', path: ['password'], message: 'Password must be 8+ characters with uppercase and number' })
   }
@@ -35,10 +36,18 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const { name, password, role, otp } = parsed.data
+    const { name, password, role, firebaseIdToken } = parsed.data
     const phone = normalizePhone(parsed.data.phone)
-    if (otp && !await verifyOtp(phone, 'register', otp)) {
-      return NextResponse.json({ error: 'Incorrect or expired OTP. Request a new code.' }, { status: 400 })
+    let firebaseIdentity: { uid: string; phone: string } | null = null
+    if (firebaseIdToken) {
+      try {
+        firebaseIdentity = await verifyFirebasePhoneIdToken(firebaseIdToken)
+      } catch {
+        return NextResponse.json({ error: 'Mobile verification failed. Request a new OTP.' }, { status: 401 })
+      }
+      if (firebaseIdentity.phone !== phone) {
+        return NextResponse.json({ error: 'The verified mobile number does not match this account.' }, { status: 400 })
+      }
     }
     const email = parsed.data.email.trim().toLowerCase()
     const ip =
@@ -54,10 +63,19 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } })
-    if (existingUser) {
+    const existingUsers = await prisma.user.findMany({
+      where: { OR: [{ email: { equals: email, mode: 'insensitive' } }, { phone }] },
+      select: { email: true, phone: true },
+    })
+    if (existingUsers.some(user => user.email.toLowerCase() === email)) {
       return NextResponse.json(
-        { error: 'An account with this email already exists' },
+        { error: 'An account with this email already exists.' },
+        { status: 409 }
+      )
+    }
+    if (existingUsers.some(user => user.phone === phone)) {
+      return NextResponse.json(
+        { error: 'An account with this mobile number already exists.' },
         { status: 409 }
       )
     }
@@ -68,7 +86,15 @@ export async function POST(req: NextRequest) {
     )
 
     const user = await prisma.user.create({
-      data: { name, email, phone, passwordHash, role },
+      data: {
+        name,
+        email,
+        phone,
+        passwordHash,
+        role,
+        firebaseUid: firebaseIdentity?.uid,
+        phoneVerifiedAt: firebaseIdentity ? new Date() : undefined,
+      },
       select: { id: true, email: true, name: true, role: true },
     })
 
@@ -82,6 +108,12 @@ export async function POST(req: NextRequest) {
     )
   } catch (error) {
     console.error('Register error:', error)
+    if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'That email address or mobile number is already registered.' },
+        { status: 409 }
+      )
+    }
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
