@@ -1,26 +1,25 @@
-import { auth } from '@/lib/auth'
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import BrandLogo from '@/components/BrandLogo'
 import LogoutButton from '@/components/LogoutButton'
+import { requireAdminSession } from '@/lib/admin-auth'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth()
-  if (!session || session.user.role !== 'ADMIN') redirect('/login')
+  const session = await requireAdminSession()
 
   const links = [
     { href: '/admin', label: 'Overview' },
-    { href: '/admin/hotels', label: 'Hotels' },
     { href: '/admin/users', label: 'Users' },
-    { href: '/admin/audit', label: 'Audit log' },
+    { href: '/admin/hotels', label: 'Hotels' },
+    { href: '/admin/bookings', label: 'Bookings' },
+    { href: '/admin/reviews', label: 'Reviews' },
+    { href: '/admin/audit-logs', label: 'Audit logs' },
   ]
 
   return (
     <div className="flex min-h-screen bg-gray-50">
       <aside className="w-56 bg-white border-r border-gray-100 fixed h-full">
         <div className="p-5 border-b border-gray-100">
-          <BrandLogo portalLabel="Admin Portal" textClassName="text-lg font-normal tracking-tight" />
-          <p className="text-xs text-red-500 font-medium">Admin Portal</p>
+          <p className="text-base font-semibold text-gray-900">Admin Portal</p>
+          <p className="mt-0.5 text-xs text-gray-400">Operations & access</p>
         </div>
         <nav className="p-4 space-y-1">
           {links.map(l => (

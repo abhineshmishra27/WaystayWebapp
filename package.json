@@ -7,7 +7,8 @@
     "build": "next build",
     "postinstall": "prisma generate",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "rbac:ensure-primary-admin": "node scripts/ensure-primary-admin.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

@@ -1,52 +1,35 @@
 import { prisma } from '@/lib/db'
+import UserManagementTable from '@/components/admin/UserManagementTable'
+import { getEffectiveRole } from '@/lib/rbac'
+import { requireAdminSession } from '@/lib/admin-auth'
 
 export default async function AdminUsersPage() {
+  const session = await requireAdminSession()
   const users = await prisma.user.findMany({
-    include: { _count: { select: { bookings: true, reviews: true } } },
+    include: { _count: { select: { bookings: true, reviews: true, hotels: true } } },
     orderBy: { createdAt: 'desc' },
   })
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-6">User management</h1>
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-            <tr>
-              <th className="text-left p-4">User</th>
-              <th className="text-left p-4">Role</th>
-              <th className="text-left p-4">Bookings</th>
-              <th className="text-left p-4">Reviews</th>
-              <th className="text-left p-4">Joined</th>
-              <th className="text-left p-4">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(user => (
-              <tr key={user.id} className="border-t border-gray-50">
-                <td className="p-4">
-                  <p className="font-medium text-sm text-gray-900">{user.name}</p>
-                  <p className="text-xs text-gray-400">{user.email}</p>
-                </td>
-                <td className="p-4">
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                    user.role === 'ADMIN' ? 'bg-red-50 text-red-700'
-                    : user.role === 'OWNER' ? 'bg-blue-50 text-blue-700'
-                    : 'bg-gray-50 text-gray-700'}`}>{user.role}</span>
-                </td>
-                <td className="p-4 text-sm text-gray-600">{user._count.bookings}</td>
-                <td className="p-4 text-sm text-gray-600">{user._count.reviews}</td>
-                <td className="p-4 text-xs text-gray-400">{new Date(user.createdAt).toLocaleDateString('en-IN')}</td>
-                <td className="p-4">
-                  <span className={`text-xs px-2 py-1 rounded-full ${user.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-400'}`}>
-                    {user.isActive ? 'Active' : 'Suspended'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900">User management</h1>
+        <p className="mt-1 text-sm text-gray-500">Assign customer, hotel owner, or administrator access and control account status.</p>
       </div>
+      <UserManagementTable currentAdminId={session.user.id} initialUsers={users.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: getEffectiveRole(user.email, user.role),
+        isActive: user.isActive,
+        createdAt: user.createdAt.toISOString(),
+        counts: {
+          bookings: user._count.bookings,
+          reviews: user._count.reviews,
+          hotels: user._count.hotels,
+        },
+      }))} />
     </div>
   )
 }

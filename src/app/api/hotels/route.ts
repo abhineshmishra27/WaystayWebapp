@@ -3,6 +3,8 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
+import { requireApiPermission } from '@/lib/api-rbac'
+import { PERMISSIONS, sessionHasPermission } from '@/lib/rbac'
 
 const createHotelSchema = z.object({
   name: z.string().min(3, 'Hotel name too short'),
@@ -31,7 +33,7 @@ export async function GET(req: NextRequest) {
     const where: Prisma.HotelWhereInput = { isActive: true }
 
     // Admins can see unapproved hotels
-    if (!session || session.user.role !== 'ADMIN') {
+    if (!sessionHasPermission(session, PERMISSIONS.ADMIN_ACCESS)) {
       where.isApproved = true
     }
 
@@ -43,8 +45,8 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-        _count: { select: { reviews: true } },
-        reviews: { select: { rating: true } },
+        _count: { select: { reviews: { where: { status: 'PUBLISHED' } } } },
+        reviews: { where: { status: 'PUBLISHED' }, select: { rating: true } },
       },
       skip,
       take: limit,
@@ -69,9 +71,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
-    if (!session || session.user.role !== 'OWNER') {
-      return NextResponse.json({ error: 'Only hotel owners can create hotels' }, { status: 403 })
-    }
+    const permissionError = requireApiPermission(session, PERMISSIONS.HOTEL_CREATE)
+    if (permissionError) return permissionError
 
     const body = await req.json()
     const parsed = createHotelSchema.safeParse(body)
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
     const hotel = await prisma.hotel.create({
       data: {
         ...hotelData,
-        ownerId: session.user.id,
+        ownerId: session!.user.id,
         pincode: '',
         rating_avg: 0,
         total_review: 0,
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest) {
             url: img.url,
             publicId: img.publicId,
             sortOrder: idx,
-            uploadedById: session.user.id,
+            uploadedById: session!.user.id,
           })),
         },
       },

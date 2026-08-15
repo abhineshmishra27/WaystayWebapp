@@ -1,10 +1,11 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { PERMISSIONS, sessionHasPermission } from '@/lib/rbac'
 
 export default async function CustomerDashboardPage() {
   const session = await auth()
-  if (!session) redirect('/login')
+  if (!session || !sessionHasPermission(session, PERMISSIONS.CUSTOMER_ACCESS)) redirect('/login?error=unauthorized')
 
   return (
     <div className="min-h-screen bg-gray-50">

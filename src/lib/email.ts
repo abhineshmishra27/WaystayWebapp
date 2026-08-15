@@ -82,7 +82,7 @@ export async function sendBookingCancellation(
 ) {
   await sendEmail({
     from: FROM, to: booking.guestEmail,
-    subject: `Booking Cancelled — Refund Initiated`,
+    subject: refundAmount ? `Booking Cancelled — Refund Initiated` : `Booking Cancelled`,
     html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
       <h1 style="color:#ef4444">Booking Cancelled</h1>
       <p>Dear ${booking.guestName}, your booking (ID: ${booking.id}) has been cancelled.</p>

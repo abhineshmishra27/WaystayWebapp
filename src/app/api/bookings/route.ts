@@ -6,6 +6,8 @@ import { getRazorpay } from '@/lib/razorpay'
 import { sendBookingConfirmation } from '@/lib/email'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
+import { requireApiPermission } from '@/lib/api-rbac'
+import { hasPermission, PERMISSIONS } from '@/lib/rbac'
 
 const createBookingSchema = z.object({
   slotId: z.string(),
@@ -68,19 +70,23 @@ function isBookingConflict(error: Error) {
   ].includes(error.message) || error.message.startsWith('Selected guests require at least')
 }
 
-export async function GET(_req: NextRequest) {
-  void _req
+export async function GET(req: NextRequest) {
   try {
     const session = await auth()
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const permissionError = requireApiPermission(session, PERMISSIONS.CUSTOMER_ACCESS)
+    if (permissionError) return permissionError
 
-    const role = session.user.role
-    const userId = session.user.id
+    const role = session!.user.role
+    const userId = session!.user.id
+    const scope = req.nextUrl.searchParams.get('scope')
 
-    const where: Prisma.BookingWhereInput = {}
-    if (role === 'CUSTOMER') where.customerId = userId
-    if (role === 'OWNER') {
+    const where: Prisma.BookingWhereInput = { customerId: userId }
+    if (scope === 'owner' && hasPermission(role, PERMISSIONS.OWNER_BOOKINGS_MANAGE)) {
+      delete where.customerId
       where.roomSlot = { room: { hotel: { ownerId: userId } } }
+    }
+    if (scope === 'all' && hasPermission(role, PERMISSIONS.ADMIN_ACCESS)) {
+      delete where.customerId
     }
 
     const bookings = await prisma.booking.findMany({
@@ -109,7 +115,8 @@ export async function POST(req: NextRequest) {
     }
 
     const session = await auth()
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const permissionError = requireApiPermission(session, PERMISSIONS.BOOKING_CREATE)
+    if (permissionError) return permissionError
 
     const body = await req.json()
     const parsed = createBookingSchema.safeParse(body)
@@ -190,7 +197,7 @@ export async function POST(req: NextRequest) {
       // Create booking
       const booking = await tx.booking.create({
         data: {
-          customerId: session.user.id,
+          customerId: session!.user.id,
           roomSlotId: slotId,
           checkIn,
           checkOut,
@@ -219,7 +226,7 @@ export async function POST(req: NextRequest) {
           receipt: booking.id.slice(-20),
           notes: {
             bookingId: booking.id,
-            customerId: session.user.id,
+            customerId: session!.user.id,
           },
         })
       } catch (error) {

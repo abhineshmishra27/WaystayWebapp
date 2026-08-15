@@ -5,6 +5,8 @@ import { sendBookingConfirmation } from '@/lib/email'
 import { finalizeRazorpayPayment, getPendingRazorpayBooking } from '@/lib/payments'
 import { validatePaymentVerification } from 'razorpay/dist/utils/razorpay-utils'
 import { z } from 'zod'
+import { requireApiPermission } from '@/lib/api-rbac'
+import { PERMISSIONS } from '@/lib/rbac'
 
 const schema = z.object({
   razorpayPaymentId: z.string(),
@@ -26,7 +28,8 @@ export async function POST(req: NextRequest) {
     }
 
     const session = await auth()
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const permissionError = requireApiPermission(session, PERMISSIONS.BOOKING_CREATE)
+    if (permissionError) return permissionError
 
     const body = await req.json()
     const parsed = schema.safeParse(body)
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Payment gateway credentials are not configured' }, { status: 503 })
     }
 
-    const booking = await getPendingRazorpayBooking(bookingId, session.user.id)
+    const booking = await getPendingRazorpayBooking(bookingId, session!.user.id)
     if (!booking?.payment) {
       return NextResponse.json({ error: 'Payment record not found' }, { status: 404 })
     }
@@ -58,7 +61,7 @@ export async function POST(req: NextRequest) {
       bookingId,
       orderId: razorpayOrderId,
       paymentId: razorpayPaymentId,
-      customerId: session.user.id,
+      customerId: session!.user.id,
     })
 
     try {

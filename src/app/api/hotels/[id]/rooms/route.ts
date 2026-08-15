@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { z } from 'zod'
+import { requireApiPermission } from '@/lib/api-rbac'
+import { hasPermission, PERMISSIONS } from '@/lib/rbac'
 
 const roomSchema = z.object({
   name: z.string().min(3),
@@ -40,21 +42,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const permissionError = requireApiPermission(session, PERMISSIONS.HOTEL_MANAGE)
+    if (permissionError) return permissionError
 
     const { id: hotelId } = await params
-    const role = session.user.role
-    const userId = session.user.id
+    const role = session!.user.role
+    const userId = session!.user.id
 
     const hotel = await prisma.hotel.findUnique({ where: { id: hotelId } })
     if (!hotel) return NextResponse.json({ error: 'Hotel not found' }, { status: 404 })
 
-    if (role === 'OWNER' && hotel.ownerId !== userId) {
+    if (!hasPermission(role, PERMISSIONS.ADMIN_ACCESS) && hotel.ownerId !== userId) {
       return NextResponse.json({ error: 'You do not own this hotel' }, { status: 403 })
-    }
-
-    if (role !== 'ADMIN' && role !== 'OWNER') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const body = await req.json()

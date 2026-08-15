@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { z } from 'zod'
+import { requireApiPermission } from '@/lib/api-rbac'
+import { hasPermission, PERMISSIONS } from '@/lib/rbac'
 
 const itemSchema = z.object({
   category: z.string().min(2),
@@ -28,11 +30,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ rest
 export async function POST(req: NextRequest, { params }: { params: Promise<{ restaurantId: string }> }) {
   try {
     const session = await auth()
-    if (!session || session.user.role === 'CUSTOMER') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-    }
+    const permissionError = requireApiPermission(session, PERMISSIONS.RESTAURANT_MANAGE)
+    if (permissionError) return permissionError
 
     const { restaurantId } = await params
+    const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId }, include: { hotel: { select: { ownerId: true } } } })
+    if (!restaurant) return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
+    if (!hasPermission(session!.user.role, PERMISSIONS.ADMIN_ACCESS) && restaurant.hotel.ownerId !== session!.user.id) {
+      return NextResponse.json({ error: 'You do not manage this restaurant.' }, { status: 403 })
+    }
     const body = await req.json()
     const parsed = itemSchema.safeParse(body)
     if (!parsed.success) return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 })

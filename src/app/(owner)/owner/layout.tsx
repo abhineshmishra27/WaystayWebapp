@@ -3,17 +3,16 @@ import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import LogoutButton from '@/components/LogoutButton'
+import { PERMISSIONS, sessionHasPermission } from '@/lib/rbac'
 
 export default async function OwnerLayout({ children }: { children: ReactNode }) {
   const session = await auth()
-  if (!session || session.user.role !== 'OWNER') redirect('/login')
+  if (!session || !sessionHasPermission(session, PERMISSIONS.OWNER_ACCESS)) redirect('/login?error=unauthorized')
 
   const navLinks = [
-    { href: '/owner', label: 'Dashboard', icon: '⊞' },
-    { href: '/owner/hotels', label: 'My Hotels', icon: '🏨' },
-    { href: '/owner/hotels/new', label: 'Add Hotel', icon: '+' },
-    { href: '/owner/bookings', label: 'Bookings', icon: '📋' },
-    { href: '/owner/restaurant', label: 'Restaurant', icon: '🍽' },
+    { href: '/owner/hotels', label: 'My properties', icon: '🏨' },
+    { href: '/owner/hotels/new', label: 'Property onboarding', icon: '+' },
+    { href: '/', label: 'Traveler site', icon: '⌂' },
   ]
 
   return (

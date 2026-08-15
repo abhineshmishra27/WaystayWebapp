@@ -371,7 +371,7 @@
       const response = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' });
       if (!response.ok) throw new Error('Session check failed');
       const session = await response.json();
-      if (!session || !session.user) {
+      if (!session || !session.user || session.user.isActive === false) {
         actions.innerHTML = `
           <a href="/login?returnTo=%2F" target="_top" class="text-sm font-semibold text-slate-600 hover:text-[var(--trust-blue)]">Sign in</a>
           <a href="/register?returnTo=%2F" target="_top" class="bg-[var(--alert-orange)] text-white text-sm font-bold px-3.5 py-2 rounded-lg hover:bg-[var(--alert-orange-dark)] transition">Signup</a>
@@ -384,7 +384,11 @@
       const fullName = session.user.name || 'Account';
       const email = session.user.email || '';
       const initial = (fullName[0] || 'A').toUpperCase();
-      const partnerHref = session.user.role === 'OWNER' ? '/owner/hotels/new' : '/partner';
+      const hasOwnerAccess = session.user.role === 'OWNER' || session.user.role === 'ADMIN';
+      const hasAdminAccess = session.user.role === 'ADMIN';
+      const partnerHref = hasOwnerAccess ? '/owner/hotels/new' : '/partner';
+      const ownerMenuLink = hasOwnerAccess ? '<a href="/owner/hotels/new" target="_top" class="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[#FFF3EA] hover:text-[var(--trust-blue)]">Owner portal</a>' : '';
+      const adminMenuLink = hasAdminAccess ? '<a href="/admin" target="_top" class="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[#FFF3EA] hover:text-[var(--trust-blue)]">Admin portal</a>' : '';
       const partnerLink = document.getElementById('landingPartnerLink');
       if (partnerLink) partnerLink.href = partnerHref;
       const avatar = session.user.avatarUrl
@@ -405,6 +409,8 @@
             </div>
             <a href="/dashboard/profile" target="_top" class="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[#FFF3EA] hover:text-[var(--trust-blue)]">Profile</a>
             <a href="/dashboard/bookings" target="_top" class="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[#FFF3EA] hover:text-[var(--trust-blue)]">My bookings</a>
+            ${ownerMenuLink}
+            ${adminMenuLink}
             <div class="border-t border-[#FFE8D6] py-1">
               <button type="button" id="landingSignOut" class="block w-full px-4 py-2.5 text-left text-sm font-medium text-red-500 hover:bg-red-50">Sign out</button>
             </div>

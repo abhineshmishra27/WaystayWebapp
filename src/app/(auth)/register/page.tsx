@@ -21,16 +21,14 @@ function RegisterForm() {
   const { status } = useSession()
   const firebaseChallenge = useRef<FirebasePhoneChallenge | null>(null)
   const [method, setMethod] = useState<Method>('password')
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '', role: 'CUSTOMER' })
+  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '' })
   const [otp, setOtp] = useState('')
   const [sent, setSent] = useState(false)
   const [otpDestination, setOtpDestination] = useState('')
   const [loading, setLoading] = useState(false)
   const [cooldown, setCooldown] = useState(0)
   const requestedReturnTo = params.get('returnTo')
-  const redirectTo = requestedReturnTo
-    ? getAuthRedirect(requestedReturnTo)
-    : form.role === 'OWNER' ? '/owner/hotels/new' : '/'
+  const redirectTo = requestedReturnTo ? getAuthRedirect(requestedReturnTo) : '/'
   const update = (key: string, value: string) => setForm(current => ({ ...current, [key]: value }))
   const validDetails = form.name.trim().length >= 2 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) && /^[6-9]\d{9}$/.test(form.phone)
   const validPassword = form.password.length >= 8 && /[A-Z]/.test(form.password) && /[0-9]/.test(form.password) && form.password === form.confirmPassword
@@ -114,7 +112,6 @@ function RegisterForm() {
           name: form.name,
           email: form.email,
           phone: form.phone,
-          role: form.role,
           ...(method === 'password' ? { password: form.password } : { firebaseIdToken }),
         }),
       })
@@ -164,7 +161,7 @@ function RegisterForm() {
             <input key={key} type={type} value={form[key]} onChange={event => { update(key, key === 'phone' ? event.target.value.replace(/\D/g, '').slice(0, 10) : event.target.value); if (sent) resetOtp() }} placeholder={placeholder} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           ))}
           {method === 'password' && <><input type="password" value={form.password} onChange={event => update('password', event.target.value)} placeholder="Create password (min 8 characters)" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /><input type="password" value={form.confirmPassword} onChange={event => update('confirmPassword', event.target.value)} placeholder="Confirm password" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></>}
-          <select value={form.role} onChange={event => update('role', event.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"><option value="CUSTOMER">Customer — looking to book hotels</option><option value="OWNER">Hotel Owner — want to list my property</option></select>
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">New accounts are created as customer accounts. Hotel owner access is assigned by a Waystay administrator.</p>
           {method === 'otp' && sent && <><p className="text-xs text-green-700">Code sent to {otpDestination}.</p><input autoFocus value={otp} onChange={event => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" maxLength={6} autoComplete="one-time-code" placeholder="Enter 6-digit OTP" className="w-full text-center tracking-[0.35em] text-lg border border-gray-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" /><div className="flex justify-between text-xs"><button type="button" onClick={resetOtp} className="text-gray-500 font-medium">Change details</button><button type="button" onClick={sendOtp} disabled={loading || cooldown > 0} className="text-indigo-600 font-medium disabled:text-gray-400">{cooldown ? `Resend OTP (${cooldown}s)` : 'Resend OTP'}</button></div></>}
           {method === 'otp' && !sent
             ? <button type="button" onClick={sendOtp} disabled={loading} className="w-full bg-indigo-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">{loading ? 'Sending OTP...' : 'Send OTP'}</button>

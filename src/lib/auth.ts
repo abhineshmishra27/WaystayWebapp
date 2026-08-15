@@ -5,6 +5,7 @@ import type { Role } from '@prisma/client'
 import { normalizeIdentifier, verifyOtp } from '@/lib/otp'
 import { verifyRegistrationLoginToken } from '@/lib/registration-login-token'
 import { verifyFirebasePhoneIdToken } from '@/lib/firebase-admin'
+import { getEffectiveRole, isPrimaryAdmin, meetsRequiredRole, normalizeEmail } from '@/lib/rbac'
 
 const ROLES: readonly Role[] = ['ADMIN', 'OWNER', 'CUSTOMER']
 const googleAuthEnabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET)
@@ -37,8 +38,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           const { prisma } = await import('@/lib/db')
           const user = await prisma.user.findFirst({ where: { id: userId, isActive: true } })
-          if (!user || (credentials.requiredRole && user.role !== credentials.requiredRole)) return null
-          return { id: user.id, email: user.email, name: user.name, role: user.role, avatarUrl: user.avatarUrl }
+          if (!user) return null
+          const role = getEffectiveRole(user.email, user.role)
+          if (!meetsRequiredRole(role, String(credentials.requiredRole || ''))) return null
+          return { id: user.id, email: user.email, name: user.name, role, avatarUrl: user.avatarUrl, isActive: true }
         }
         const firebaseIdToken = typeof credentials?.firebaseIdToken === 'string'
           && credentials.firebaseIdToken.length > 100
@@ -54,7 +57,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           const { prisma } = await import('@/lib/db')
           const user = await prisma.user.findUnique({ where: { phone: verifiedPhone.phone } })
-          if (!user?.isActive || (credentials.requiredRole && user.role !== credentials.requiredRole)) return null
+          if (!user?.isActive) return null
+          const role = getEffectiveRole(user.email, user.role)
+          if (!meetsRequiredRole(role, String(credentials.requiredRole || ''))) return null
           if (user.firebaseUid && user.firebaseUid !== verifiedPhone.uid) return null
 
           const uidOwner = await prisma.user.findUnique({ where: { firebaseUid: verifiedPhone.uid } })
@@ -70,7 +75,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             })
           }
 
-          return { id: user.id, email: user.email, name: user.name, role: user.role, avatarUrl: user.avatarUrl }
+          return { id: user.id, email: user.email, name: user.name, role, avatarUrl: user.avatarUrl, isActive: true }
         }
         if (credentials?.identifier && credentials?.otp) {
           const identifier = normalizeIdentifier(String(credentials.identifier))
@@ -78,8 +83,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           const { prisma } = await import('@/lib/db')
           const user = await prisma.user.findFirst({ where: { isActive: true, OR: [{ email: identifier }, { phone: identifier }] } })
-          if (!user || (credentials.requiredRole && user.role !== credentials.requiredRole)) return null
-          return { id: user.id, email: user.email, name: user.name, role: user.role, avatarUrl: user.avatarUrl }
+          if (!user) return null
+          if (identifier.includes('@') && !user.emailVerifiedAt) {
+            await prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } })
+          }
+          const role = getEffectiveRole(user.email, user.role)
+          if (!meetsRequiredRole(role, String(credentials.requiredRole || ''))) return null
+          return { id: user.id, email: user.email, name: user.name, role, avatarUrl: user.avatarUrl, isActive: true }
         }
         if (!credentials?.identifier || !credentials?.password) return null
 
@@ -90,7 +100,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await prisma.user.findFirst({ where: { isActive: true, OR: [{ email: identifier }, { phone: identifier }] } })
 
         if (!user || !user.isActive) return null
-        if (credentials.requiredRole && user.role !== credentials.requiredRole) return null
+        const role = getEffectiveRole(user.email, user.role)
+        if (!meetsRequiredRole(role, String(credentials.requiredRole || ''))) return null
 
         const isValid = await bcrypt.compare(
           credentials.password as string,
@@ -103,8 +114,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role,
+          role,
           avatarUrl: user.avatarUrl,
+          isActive: true,
         }
       },
     }),
@@ -135,6 +147,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { id: existingUser.id },
           data: {
             avatarUrl: existingUser.avatarUrl ?? user.image,
+            role: isPrimaryAdmin(email) ? 'ADMIN' : existingUser.role,
+            emailVerifiedAt: existingUser.emailVerifiedAt ?? new Date(),
           },
         })
         return true
@@ -151,29 +165,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email,
           name: user.name || email.split('@')[0],
           passwordHash,
-          role: 'CUSTOMER',
+          role: isPrimaryAdmin(email) ? 'ADMIN' : 'CUSTOMER',
           avatarUrl: user.image,
+          emailVerifiedAt: new Date(),
         },
       })
       return true
     },
-    async jwt({ token, user, account, trigger, session }) {
-      if (account?.provider === 'google' && token.email) {
-        const { prisma } = await import('@/lib/db')
-        const localUser = await prisma.user.findUnique({
-          where: { email: token.email },
-          select: { id: true, role: true, avatarUrl: true, isActive: true },
-        })
-
-        if (localUser?.isActive) {
-          token.sub = localUser.id
-          token.role = localUser.role
-          token.avatarUrl = localUser.avatarUrl
-        }
-      }
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         if (isRole(user.role)) token.role = user.role
         if ('avatarUrl' in user) token.avatarUrl = user.avatarUrl ?? null
+        if (typeof user.isActive === 'boolean') token.isActive = user.isActive
+      }
+
+      const { prisma } = await import('@/lib/db')
+      let localUser = token.sub
+        ? await prisma.user.findUnique({
+            where: { id: token.sub },
+            select: { id: true, email: true, role: true, avatarUrl: true, isActive: true },
+          })
+        : null
+      if (!localUser && token.email) {
+        localUser = await prisma.user.findUnique({
+          where: { email: normalizeEmail(token.email) },
+          select: { id: true, email: true, role: true, avatarUrl: true, isActive: true },
+        })
+      }
+      if (localUser) {
+        token.sub = localUser.id
+        token.role = getEffectiveRole(localUser.email, localUser.role)
+        token.avatarUrl = localUser.avatarUrl
+        token.isActive = localUser.isActive
+      } else {
+        token.isActive = false
       }
       if (trigger === 'update' && session?.user) {
         if (typeof session.user.name === 'string') token.name = session.user.name
@@ -187,6 +212,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.id = token.sub ?? ''
       if (isRole(token.role)) session.user.role = token.role
       session.user.avatarUrl = typeof token.avatarUrl === 'string' ? token.avatarUrl : null
+      session.user.isActive = token.isActive === true
       return session
     },
   },

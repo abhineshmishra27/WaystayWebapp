@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
       },
       include: {
         images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-        reviews: { select: { rating: true } },
+        reviews: { where: { status: 'PUBLISHED' }, select: { rating: true } },
         rooms: {
           where: { isActive: true },
           select: { id: true, pricePerHour: true, price_3h: true, price_6h: true, price_12h: true, priceFullDay: true },

@@ -5,9 +5,11 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import BrandLogo from '@/components/BrandLogo'
 import LogoutButton from '@/components/LogoutButton'
+import { hasPermission, PERMISSIONS } from '@/lib/rbac'
 
 export default function Header() {
-  const { data: session } = useSession()
+  const { data } = useSession()
+  const session = data?.user.isActive ? data : null
   const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -15,6 +17,8 @@ export default function Header() {
   const firstName = session?.user.name?.split(' ')[0] || 'Account'
   const authDestination = pathname === '/login' || pathname === '/register' ? '/' : pathname || '/'
   const returnTo = encodeURIComponent(authDestination)
+  const hasOwnerAccess = hasPermission(session?.user.role, PERMISSIONS.OWNER_ACCESS)
+  const hasAdminAccess = hasPermission(session?.user.role, PERMISSIONS.ADMIN_ACCESS)
 
   useEffect(() => {
     if (!menuOpen) return
@@ -108,6 +112,16 @@ export default function Header() {
                   >
                     My bookings
                   </Link>
+                  {hasOwnerAccess && (
+                    <Link href="/owner/hotels/new" onClick={() => setMenuOpen(false)} className="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[var(--waystay-orange-soft)] hover:text-[var(--waystay-blue)]">
+                      Owner portal
+                    </Link>
+                  )}
+                  {hasAdminAccess && (
+                    <Link href="/admin" onClick={() => setMenuOpen(false)} className="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[var(--waystay-orange-soft)] hover:text-[var(--waystay-blue)]">
+                      Admin portal
+                    </Link>
+                  )}
                   <div className="border-t border-[var(--waystay-orange-tint)] py-1">
                     <LogoutButton className="block w-full px-4 py-2.5 text-left text-sm font-medium text-red-500 hover:bg-red-50 disabled:opacity-60" />
                   </div>

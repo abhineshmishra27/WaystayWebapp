@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requireApiPermission } from '@/lib/api-rbac'
+import { PERMISSIONS } from '@/lib/rbac'
 
 const profileSchema = z.object({
   name: z.string().trim().min(2, 'Name must be at least 2 characters').max(80, 'Name is too long'),
@@ -21,12 +23,11 @@ function normalizeOptional(value: string | null | undefined) {
 export async function GET() {
   try {
     const session = await auth()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const permissionError = requireApiPermission(session, PERMISSIONS.CUSTOMER_ACCESS)
+    if (permissionError) return permissionError
 
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: session!.user.id },
       select: {
         id: true,
         name: true,
@@ -59,9 +60,8 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   try {
     const session = await auth()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const permissionError = requireApiPermission(session, PERMISSIONS.CUSTOMER_ACCESS)
+    if (permissionError) return permissionError
 
     const parsed = profileSchema.safeParse(await req.json())
     if (!parsed.success) {
@@ -72,7 +72,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const user = await prisma.user.update({
-      where: { id: session.user.id },
+      where: { id: session!.user.id },
       data: {
         name: parsed.data.name,
         phone: normalizeOptional(parsed.data.phone),

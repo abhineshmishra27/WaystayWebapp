@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { z } from 'zod'
+import { requireApiPermission } from '@/lib/api-rbac'
+import { PERMISSIONS } from '@/lib/rbac'
 
 const createReviewSchema = z.object({
   bookingId: z.string(),
@@ -15,11 +17,8 @@ const createReviewSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    if (session.user.role !== 'CUSTOMER') {
-      return NextResponse.json({ error: 'Only customers can submit reviews' }, { status: 403 })
-    }
+    const permissionError = requireApiPermission(session, PERMISSIONS.REVIEW_CREATE)
+    if (permissionError) return permissionError
 
     const body = await req.json()
     const parsed = createReviewSchema.safeParse(body)
@@ -28,12 +27,16 @@ export async function POST(req: NextRequest) {
     }
 
     const { bookingId, hotelId, rating, title, body: reviewBody, mediaUrls } = parsed.data
-    const customerId = session.user.id
+    const customerId = session!.user.id
 
-    const booking = await prisma.booking.findUnique({ where: { id: bookingId } })
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { roomSlot: { include: { room: { select: { hotelId: true } } } } },
+    })
     if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
     if (booking.customerId !== customerId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     if (booking.status !== 'COMPLETED') return NextResponse.json({ error: 'You can only review completed stays' }, { status: 400 })
+    if (booking.roomSlot.room.hotelId !== hotelId) return NextResponse.json({ error: 'Hotel does not match this booking' }, { status: 400 })
 
     const existing = await prisma.review.findUnique({ where: { bookingId } })
     if (existing) return NextResponse.json({ error: 'You have already reviewed this stay' }, { status: 409 })
@@ -42,7 +45,7 @@ export async function POST(req: NextRequest) {
       data: {
         bookingId,
         customerId,
-        hotelId,
+        hotelId: booking.roomSlot.room.hotelId,
         rating,
         title,
         body: reviewBody,

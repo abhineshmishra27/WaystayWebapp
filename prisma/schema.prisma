@@ -31,7 +31,13 @@ enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
+  REFUND_PENDING
   REFUNDED
+}
+
+enum ReviewStatus {
+  PUBLISHED
+  HIDDEN
 }
 
 enum PaymentProvider {
@@ -53,6 +59,7 @@ enum MediaType {
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
+  emailVerifiedAt DateTime?
   passwordHash  String
   name          String
   phone         String?   @unique
@@ -192,6 +199,8 @@ model Booking {
   guestPhone    String
   guestCount    Int           @default(1)
   roomCount     Int           @default(1)
+  cancelledAt   DateTime?
+  cancellationReason String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -219,6 +228,8 @@ model Payment {
   provider          PaymentProvider @default(RAZORPAY)
   providerPaymentId String?
   providerOrderId   String?
+  providerRefundId  String?
+  refundedAt        DateTime?
   status            PaymentStatus   @default(PENDING)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -236,10 +247,15 @@ model Review {
   title       String
   body        String
   ownerReply  String?
+  status      ReviewStatus @default(PUBLISHED)
+  moderationReason String?
+  moderatedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   media       ReviewMedia[]
+
+  @@index([status, createdAt])
 }
 
 model ReviewMedia {

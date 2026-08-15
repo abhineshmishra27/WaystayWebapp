@@ -3,6 +3,8 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { generateSlotsForRoom } from '@/lib/slots'
 import { z } from 'zod'
+import { requireApiPermission } from '@/lib/api-rbac'
+import { hasPermission, PERMISSIONS } from '@/lib/rbac'
 
 const slotGenerationSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -13,15 +15,16 @@ const slotGenerationSchema = z.object({
 export async function POST(req: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
   try {
     const session = await auth()
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const permissionError = requireApiPermission(session, PERMISSIONS.HOTEL_MANAGE)
+    if (permissionError) return permissionError
 
     const { roomId } = await params
     const room = await prisma.room.findUnique({ where: { id: roomId }, include: { hotel: true } })
     if (!room) return NextResponse.json({ error: 'Room not found' }, { status: 404 })
 
-    const role = session.user.role
-    const userId = session.user.id
-    if (role !== 'ADMIN' && room.hotel.ownerId !== userId) {
+    const role = session!.user.role
+    const userId = session!.user.id
+    if (!hasPermission(role, PERMISSIONS.ADMIN_ACCESS) && room.hotel.ownerId !== userId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

@@ -1,8 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import { NextResponse } from 'next/server'
-
-type Role = 'ADMIN' | 'OWNER' | 'CUSTOMER'
+import type { Role } from '@prisma/client'
 
 async function getRole(req: NextRequest) {
   const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET
@@ -14,6 +13,7 @@ async function getRole(req: NextRequest) {
     secureCookie: req.nextUrl.protocol === 'https:',
   })
 
+  if (token?.isActive === false) return null
   return typeof token?.role === 'string' ? (token.role as Role) : null
 }
 
@@ -27,13 +27,13 @@ export default async function middleware(req: NextRequest) {
   }
 
   if (pathname.startsWith('/admin')) {
-    if (!role || role !== 'ADMIN') {
+    if (!role) {
       return NextResponse.redirect(new URL('/login?error=unauthorized', req.url))
     }
   }
 
   if (pathname.startsWith('/owner')) {
-    if (!role || role !== 'OWNER') {
+    if (!role) {
       return NextResponse.redirect(new URL('/login?error=unauthorized', req.url))
     }
   }

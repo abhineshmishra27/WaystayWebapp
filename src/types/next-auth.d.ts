@@ -5,6 +5,7 @@ declare module 'next-auth' {
     id: string
     role: Role
     avatarUrl?: string | null
+    isActive?: boolean
   }
   interface Session {
     user: {
@@ -13,6 +14,7 @@ declare module 'next-auth' {
       name: string
       role: Role
       avatarUrl?: string | null
+      isActive: boolean
     }
   }
 }
@@ -21,5 +23,6 @@ declare module 'next-auth/jwt' {
   interface JWT {
     role: Role
     avatarUrl?: string | null
+    isActive?: boolean
   }
 }

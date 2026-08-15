@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { normalizePhone } from '@/lib/otp'
 import { rateLimit } from '@/lib/rate-limit'
+import { isPrimaryAdmin } from '@/lib/rbac'
 
 const schema = z.discriminatedUnion('purpose', [
   z.object({ purpose: z.literal('login'), phone: z.string() }),
@@ -39,6 +40,9 @@ export async function POST(req: NextRequest) {
     }
   } else {
     const email = parsed.data.email.trim().toLowerCase()
+    if (isPrimaryAdmin(email)) {
+      return NextResponse.json({ error: 'This administrator email is reserved. Sign in instead.' }, { status: 403 })
+    }
     const matches = await prisma.user.findMany({
       where: {
         OR: [

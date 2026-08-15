@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { normalizePhone } from '@/lib/otp'
 import { createRegistrationLoginToken } from '@/lib/registration-login-token'
 import { verifyFirebasePhoneIdToken } from '@/lib/firebase-admin'
+import { isPrimaryAdmin } from '@/lib/rbac'
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -13,8 +14,7 @@ const registerSchema = z.object({
   phone: z.string().min(10, 'Phone must be at least 10 digits'),
   firebaseIdToken: z.string().min(100).optional(),
   password: z.string().optional(),
-  role: z.enum(['OWNER', 'CUSTOMER']),
-}).superRefine((data, ctx) => {
+}).strict().superRefine((data, ctx) => {
   if (data.firebaseIdToken) return
   if (!data.password || data.password.length < 8 || !/[A-Z]/.test(data.password) || !/[0-9]/.test(data.password)) {
     ctx.addIssue({ code: 'custom', path: ['password'], message: 'Password must be 8+ characters with uppercase and number' })
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const { name, password, role, firebaseIdToken } = parsed.data
+    const { name, password, firebaseIdToken } = parsed.data
     const phone = normalizePhone(parsed.data.phone)
     let firebaseIdentity: { uid: string; phone: string } | null = null
     if (firebaseIdToken) {
@@ -50,6 +50,12 @@ export async function POST(req: NextRequest) {
       }
     }
     const email = parsed.data.email.trim().toLowerCase()
+    if (isPrimaryAdmin(email)) {
+      return NextResponse.json(
+        { error: 'This administrator email is reserved. Sign in with the existing account.' },
+        { status: 403 },
+      )
+    }
     const ip =
       req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
       req.headers.get('x-real-ip') ||
@@ -91,7 +97,7 @@ export async function POST(req: NextRequest) {
         email,
         phone,
         passwordHash,
-        role,
+        role: 'CUSTOMER',
         firebaseUid: firebaseIdentity?.uid,
         phoneVerifiedAt: firebaseIdentity ? new Date() : undefined,
       },
