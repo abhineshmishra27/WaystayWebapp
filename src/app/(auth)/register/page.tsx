@@ -84,7 +84,7 @@ function RegisterForm() {
       setSent(true)
       setOtpDestination(`******${form.phone.slice(-4)}`)
       startCooldown()
-      toast.success('SMS OTP sent by Firebase.')
+      toast.success('OTP has been sent')
     } catch (error) {
       toast.error(getFirebasePhoneError(error))
     } finally {

@@ -95,7 +95,7 @@ function LoginForm() {
           'login-firebase-recaptcha',
         )
         setOtpDestination(`******${normalizedIdentifier.slice(-4)}`)
-        toast.success('SMS OTP sent by Firebase.')
+        toast.success('OTP has been sent')
       } else {
         const response = await fetch('/api/auth/otp/request', {
           method: 'POST',
