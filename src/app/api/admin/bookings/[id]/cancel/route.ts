@@ -7,6 +7,7 @@ import { sendBookingCancellation } from '@/lib/email'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { PERMISSIONS } from '@/lib/rbac'
 import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-db'
+import { canCancelBooking } from '@/lib/booking-cancellation'
 
 const schema = z.object({
   reason: z.string().trim().min(5).max(500),
@@ -36,6 +37,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!booking) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
   if (!['PENDING', 'CONFIRMED'].includes(booking.status)) {
     return NextResponse.json({ error: `A ${booking.status.toLowerCase()} booking cannot be cancelled.` }, { status: 409 })
+  }
+  const cancellationRequestedAt = new Date()
+  if (!canCancelBooking(booking, cancellationRequestedAt)) {
+    return NextResponse.json({ error: 'This stay has already started and can no longer be cancelled.' }, { status: 409 })
   }
 
   let refundAmount: number | undefined
@@ -85,12 +90,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     refundAmount = payment.amount
   }
 
-  const cancelledAt = new Date()
+  const cancelledAt = cancellationRequestedAt
   try {
     await prisma.$transaction(async tx => {
       await lockRoomInventory(tx, booking.roomSlot.roomId)
       const bookingUpdate = await tx.booking.updateMany({
-        where: { id, status: { in: ['PENDING', 'CONFIRMED'] } },
+        where: { id, status: { in: ['PENDING', 'CONFIRMED'] }, checkIn: { gt: cancellationRequestedAt } },
         data: {
           status: 'CANCELLED',
           cancelledAt,

@@ -17,7 +17,14 @@ async function sendEmail(payload: EmailPayload) {
     return
   }
 
-  await resend.emails.send(payload)
+  const { error } = await resend.emails.send(payload)
+  if (error) throw new Error(error.message || 'Email delivery failed')
+}
+
+function escapeHtml(value: string | number) {
+  return String(value).replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
+  })[character] || character)
 }
 
 function formatDate(d: Date | string) {
@@ -119,6 +126,71 @@ export async function sendReviewNudge(booking: ReviewNudgeData, hotelName: strin
       <h1 style="color:#4f46e5">How was your stay?</h1>
       <p>Dear ${booking.guestName}, we hope you enjoyed your stay!</p>
       <a href="${process.env.NEXTAUTH_URL}/dashboard/bookings/${booking.id}/review" style="display:inline-block;background:#4f46e5;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;margin-top:16px">Write a review</a>
+    </div>`,
+  })
+}
+
+export interface PartnerApplicationEmailData {
+  id: string
+  fullName: string
+  businessName: string
+  email: string
+  phone: string
+  gstNumber: string
+  city: string
+  state: string
+  propertyCount: number
+  message?: string | null
+}
+
+export async function sendPartnerApplicationAdminEmail(application: PartnerApplicationEmailData) {
+  const adminEmail = process.env.PARTNER_ADMIN_EMAIL || 'waystayrooms@gmail.com'
+  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3017'
+  await sendEmail({
+    from: FROM,
+    to: adminEmail,
+    replyTo: application.email,
+    subject: `New hotel-owner application — ${application.businessName}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;padding:24px;color:#0f172a">
+      <h1 style="font-size:24px;color:#0a2540">New partner onboarding request</h1>
+      <p>A hotel owner has shared their intent to onboard with Waystay.</p>
+      <table style="width:100%;border-collapse:collapse;margin:20px 0">
+        <tr><td style="padding:8px;color:#64748b">Owner</td><td style="padding:8px;font-weight:600">${escapeHtml(application.fullName)}</td></tr>
+        <tr style="background:#f8fafc"><td style="padding:8px;color:#64748b">Business</td><td style="padding:8px;font-weight:600">${escapeHtml(application.businessName)}</td></tr>
+        <tr><td style="padding:8px;color:#64748b">Email</td><td style="padding:8px">${escapeHtml(application.email)}</td></tr>
+        <tr style="background:#f8fafc"><td style="padding:8px;color:#64748b">Phone</td><td style="padding:8px">${escapeHtml(application.phone)}</td></tr>
+        <tr><td style="padding:8px;color:#64748b">GST number</td><td style="padding:8px">${escapeHtml(application.gstNumber)}</td></tr>
+        <tr style="background:#f8fafc"><td style="padding:8px;color:#64748b">Location</td><td style="padding:8px">${escapeHtml(application.city)}, ${escapeHtml(application.state)}</td></tr>
+        <tr><td style="padding:8px;color:#64748b">Properties</td><td style="padding:8px">${escapeHtml(application.propertyCount)}</td></tr>
+      </table>
+      ${application.message ? `<p><strong>Additional information:</strong><br>${escapeHtml(application.message)}</p>` : ''}
+      <p style="font-size:12px;color:#64748b">The applicant's password is securely hashed and is never included in email.</p>
+      <a href="${baseUrl}/admin/partners" style="display:inline-block;background:#ff6b00;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Review application</a>
+    </div>`,
+  })
+}
+
+export async function sendPartnerApplicationDecisionEmail(
+  application: Pick<PartnerApplicationEmailData, 'fullName' | 'email'>,
+  approved: boolean,
+  reason?: string,
+) {
+  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3017'
+  const contactEmail = process.env.PARTNER_ADMIN_EMAIL || 'waystayrooms@gmail.com'
+  await sendEmail({
+    from: FROM,
+    to: application.email,
+    replyTo: contactEmail,
+    subject: approved ? 'Your Waystay hotel-owner account is approved' : 'Update on your Waystay partner application',
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;color:#0f172a">
+      <h1 style="color:#0a2540">${approved ? 'Welcome to Waystay partners' : 'Partner application update'}</h1>
+      <p>Hi ${escapeHtml(application.fullName)},</p>
+      <p>${approved
+        ? 'Your hotel-owner account has been approved. You can now sign in using your registered email or mobile number.'
+        : 'Your hotel-owner application was not approved at this time.'}</p>
+      ${reason ? `<p><strong>Reason:</strong> ${escapeHtml(reason)}</p>` : ''}
+      ${approved ? `<p>Please email the complete hotel address, licence details, room inventory, prices, amenities and original photos to <a href="mailto:${contactEmail}">${contactEmail}</a>. A Waystay administrator will create and manage the listing.</p>` : ''}
+      ${approved ? `<a href="${baseUrl}/partner" style="display:inline-block;background:#ff6b00;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Sign in to owner portal</a>` : ''}
     </div>`,
   })
 }

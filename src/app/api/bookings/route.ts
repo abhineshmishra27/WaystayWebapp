@@ -58,6 +58,7 @@ function isBookingConflict(error: Error) {
     'Multi-day bookings require a full-day slot',
     'One or more selected dates are no longer available',
     'This time overlaps another booking',
+    'This hotel is not currently accepting bookings',
     'Payment gateway authentication failed',
   ].includes(error.message) || error.message.startsWith('Selected guests require at least')
 }
@@ -126,8 +127,11 @@ export async function POST(req: NextRequest) {
 
     const result = await prisma.$transaction(async (tx) => {
       // Lock the slot
-      const slot = await tx.roomSlot.findUnique({ where: { id: slotId }, include: { room: true } })
+      const slot = await tx.roomSlot.findUnique({ where: { id: slotId }, include: { room: { include: { hotel: true } } } })
       if (!slot) throw new Error('Slot not found')
+      if (!slot.room.hotel.isApproved || !slot.room.hotel.isActive || !slot.room.hotel.ownerEnabled) {
+        throw new Error('This hotel is not currently accepting bookings')
+      }
       await lockRoomInventory(tx, slot.roomId)
       const maxGuestsPerRoom = Math.max(1, Math.min(slot.room.maxOccupancy, 3))
       const requiredRooms = Math.ceil(guestCount / maxGuestsPerRoom)

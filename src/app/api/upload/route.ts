@@ -7,12 +7,14 @@ import { PERMISSIONS } from '@/lib/rbac'
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
-    const permissionError = requireApiPermission(session, PERMISSIONS.CUSTOMER_ACCESS)
-    if (permissionError) return permissionError
-
     const formData = await req.formData()
     const file = formData.get('file') as File | null
     const folder = (formData.get('folder') as string) || 'general'
+    const permissionError = requireApiPermission(
+      session,
+      folder === 'hotels' ? PERMISSIONS.HOTEL_MANAGE : PERMISSIONS.CUSTOMER_ACCESS,
+    )
+    if (permissionError) return permissionError
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })

@@ -8,6 +8,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const links = [
     { href: '/admin', label: 'Overview' },
     { href: '/admin/users', label: 'Users' },
+    { href: '/admin/partners', label: 'Partner applications' },
     { href: '/admin/hotels', label: 'Hotels' },
     { href: '/admin/bookings', label: 'Bookings' },
     { href: '/admin/reviews', label: 'Reviews' },

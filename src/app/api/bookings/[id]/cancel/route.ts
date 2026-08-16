@@ -6,6 +6,7 @@ import { sendBookingCancellation } from '@/lib/email'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
 import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-db'
+import { canCancelBooking } from '@/lib/booking-cancellation'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -28,8 +29,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    const cancellationRequestedAt = new Date()
     if (!['PENDING', 'CONFIRMED'].includes(booking.status)) {
       return NextResponse.json({ error: 'Cannot cancel this booking' }, { status: 400 })
+    }
+    if (!canCancelBooking(booking, cancellationRequestedAt)) {
+      return NextResponse.json({ error: 'This stay has already started and can no longer be cancelled.' }, { status: 409 })
     }
 
     if (booking.payment?.status === 'REFUND_PENDING') {
@@ -64,14 +69,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       refundAmount = booking.payment.amount
     }
 
-    const cancelledAt = new Date()
+    const cancelledAt = cancellationRequestedAt
     await prisma.$transaction(async tx => {
       await lockRoomInventory(tx, booking.roomSlot.roomId)
       const changed = await tx.booking.updateMany({
-        where: { id, status: { in: ['PENDING', 'CONFIRMED'] } },
+        where: { id, status: { in: ['PENDING', 'CONFIRMED'] }, checkIn: { gt: cancellationRequestedAt } },
         data: { status: 'CANCELLED', cancelledAt, cancellationReason: 'Cancelled by customer' },
       })
-      if (changed.count !== 1) throw new Error('Booking state changed')
+      if (changed.count !== 1) throw new Error('BOOKING_CANCELLATION_NOT_ALLOWED')
       if (booking.payment?.status === 'PENDING') {
         await tx.payment.updateMany({ where: { id: booking.payment.id, status: 'PENDING' }, data: { status: 'FAILED' } })
       }
@@ -83,7 +88,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     } catch (e) { console.error('Cancel email error:', e) }
 
     return NextResponse.json({ success: true, refundAmount })
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === 'BOOKING_CANCELLATION_NOT_ALLOWED') {
+      return NextResponse.json({ error: 'This booking can no longer be cancelled. Refresh your bookings.' }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Failed to cancel booking' }, { status: 500 })
   }
 }

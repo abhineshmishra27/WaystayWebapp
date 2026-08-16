@@ -11,7 +11,6 @@ export default async function OwnerLayout({ children }: { children: ReactNode })
 
   const navLinks = [
     { href: '/owner/hotels', label: 'My properties', icon: '🏨' },
-    { href: '/owner/hotels/new', label: 'Property onboarding', icon: '+' },
     { href: '/', label: 'Traveler site', icon: '⌂' },
   ]
 

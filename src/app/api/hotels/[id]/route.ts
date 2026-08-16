@@ -60,7 +60,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         hotel.ownerId === session.user.id
       ),
     )
-    if ((!hotel.isApproved || !hotel.isActive) && !canManageDraft) {
+    if ((!hotel.isApproved || !hotel.isActive || !hotel.ownerEnabled) && !canManageDraft) {
       return NextResponse.json({ error: 'Hotel not found' }, { status: 404 })
     }
 

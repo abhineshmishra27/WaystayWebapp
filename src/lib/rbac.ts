@@ -8,6 +8,7 @@ export const PERMISSIONS = {
   BOOKING_CREATE: 'booking:create',
   REVIEW_CREATE: 'review:create',
   OWNER_ACCESS: 'owner:access',
+  HOTEL_STATUS_MANAGE: 'hotel-status:manage',
   HOTEL_CREATE: 'hotel:create',
   HOTEL_MANAGE: 'hotel:manage',
   OWNER_BOOKINGS_MANAGE: 'owner-bookings:manage',
@@ -19,6 +20,7 @@ export const PERMISSIONS = {
   BOOKING_MANAGE: 'booking:manage',
   REVIEW_MODERATE: 'review:moderate',
   AUDIT_VIEW: 'audit:view',
+  PARTNER_APPLICATION_MANAGE: 'partner-application:manage',
 } as const
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -32,11 +34,7 @@ const customerPermissions: readonly Permission[] = [
 const ownerPermissions: readonly Permission[] = [
   ...customerPermissions,
   PERMISSIONS.OWNER_ACCESS,
-  PERMISSIONS.HOTEL_CREATE,
-  PERMISSIONS.HOTEL_MANAGE,
-  PERMISSIONS.OWNER_BOOKINGS_MANAGE,
-  PERMISSIONS.REVIEW_REPLY,
-  PERMISSIONS.RESTAURANT_MANAGE,
+  PERMISSIONS.HOTEL_STATUS_MANAGE,
 ]
 
 export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
@@ -45,11 +43,17 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
   ADMIN: [
     ...ownerPermissions,
     PERMISSIONS.ADMIN_ACCESS,
+    PERMISSIONS.HOTEL_CREATE,
+    PERMISSIONS.HOTEL_MANAGE,
+    PERMISSIONS.OWNER_BOOKINGS_MANAGE,
+    PERMISSIONS.REVIEW_REPLY,
+    PERMISSIONS.RESTAURANT_MANAGE,
     PERMISSIONS.USER_MANAGE,
     PERMISSIONS.HOTEL_APPROVE,
     PERMISSIONS.BOOKING_MANAGE,
     PERMISSIONS.REVIEW_MODERATE,
     PERMISSIONS.AUDIT_VIEW,
+    PERMISSIONS.PARTNER_APPLICATION_MANAGE,
   ],
 }
 

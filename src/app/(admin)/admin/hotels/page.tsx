@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import HotelManagementTable from '@/components/admin/HotelManagementTable'
 import { getEffectiveRole, hasPermission, PERMISSIONS } from '@/lib/rbac'
 import { requireAdminSession } from '@/lib/admin-auth'
+import Link from 'next/link'
 
 export default async function AdminHotelsPage() {
   await requireAdminSession()
@@ -35,7 +36,7 @@ export default async function AdminHotelsPage() {
 
   return (
     <div>
-      <div className="mb-6"><h1 className="text-2xl font-semibold text-gray-900">Hotel administration</h1><p className="mt-1 text-sm text-gray-500">Review submissions, manage approval decisions, and assign verified owners.</p></div>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-2xl font-semibold text-gray-900">Hotel administration</h1><p className="mt-1 text-sm text-gray-500">Create and manage hotel content, approval decisions, and verified owner assignments.</p></div><Link href="/admin/hotels/new" className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700">Add hotel</Link></div>
       <HotelManagementTable
         initialHotels={hotels.map(hotel => ({
           id: hotel.id,
@@ -51,6 +52,7 @@ export default async function AdminHotelsPage() {
           owner: hotel.owner,
           approvalStatus: hotel.isApproved ? 'APPROVED' as const : hotel.auditLogs[0]?.action === 'HOTEL_REJECTED' ? 'REJECTED' as const : 'PENDING' as const,
           isActive: hotel.isActive,
+          ownerEnabled: hotel.ownerEnabled,
           createdAt: hotel.createdAt.toISOString(),
           counts: { rooms: hotel._count.rooms, reviews: hotel._count.reviews, photos: hotel._count.images },
         }))}

@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
       where: {
         isApproved: true,
         isActive: true,
+        ownerEnabled: true,
         ...(city ? { city: { contains: city, mode: 'insensitive' } } : {}),
       },
       include: {

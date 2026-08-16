@@ -56,169 +56,200 @@ enum MediaType {
   VIDEO
 }
 
-model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  emailVerifiedAt DateTime?
-  passwordHash  String
-  name          String
-  phone         String?   @unique
-  firebaseUid   String?   @unique
-  phoneVerifiedAt DateTime?
-  role          Role      @default(CUSTOMER)
-  avatarUrl     String?
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+enum PartnerApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
 
-  hotels        Hotel[]
-  bookings      Booking[]
-  reviews       Review[]
-  uploadedImages HotelImage[]
-  auditLogs     AuditLog[]
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  emailVerifiedAt DateTime?
+  passwordHash    String
+  name            String
+  phone           String?   @unique
+  firebaseUid     String?   @unique
+  phoneVerifiedAt DateTime?
+  role            Role      @default(CUSTOMER)
+  avatarUrl       String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  hotels                      Hotel[]
+  bookings                    Booking[]
+  reviews                     Review[]
+  uploadedImages              HotelImage[]
+  auditLogs                   AuditLog[]
+  reviewedPartnerApplications PartnerApplication[] @relation("PartnerApplicationReviewer")
+}
+
+model PartnerApplication {
+  id            String                   @id @default(cuid())
+  fullName      String
+  businessName  String
+  email         String                   @unique
+  phone         String                   @unique
+  passwordHash  String
+  gstNumber     String
+  city          String
+  state         String
+  propertyCount Int                      @default(1)
+  message       String?
+  status        PartnerApplicationStatus @default(PENDING)
+  reviewedById  String?
+  reviewedBy    User?                    @relation("PartnerApplicationReviewer", fields: [reviewedById], references: [id])
+  reviewedAt    DateTime?
+  reviewReason  String?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  @@index([status, createdAt])
 }
 
 model OtpChallenge {
-  id          String   @id @default(cuid())
-  identifier  String
-  purpose     String
-  codeHash    String
-  expiresAt   DateTime
-  attempts    Int      @default(0)
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  identifier String
+  purpose    String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
 
   @@index([identifier, purpose, createdAt])
 }
 
 model Hotel {
-  id            String    @id @default(cuid())
-  ownerId       String
-  owner         User      @relation(fields: [ownerId], references: [id])
-  name          String
-  description   String
-  address       String
-  city          String
-  state         String
-  country       String    @default("India")
-  pincode     String
-  lat           Float
-  lng           Float
-  highway_tag     Boolean   @default(false)
-  checkInTime   String    @default("12:00")
-  checkOutTime  String    @default("11:00")
-  amenities     String[]
-  isApproved    Boolean   @default(false)
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  checkin_policy   String  @default("Check-in time is 12 PM")
-  checkout_policy  String  @default("Check-out time is 11 AM")
-  images        HotelImage[]
-  rooms         Room[]
-  reviews       Review[]
-  rating_avg   Float
-  total_review   Int
-  license_number String
-  gst_number String
-  restaurant    Restaurant?
-  auditLogs     AuditLog[]
+  id              String       @id @default(cuid())
+  ownerId         String
+  owner           User         @relation(fields: [ownerId], references: [id])
+  name            String
+  description     String
+  address         String
+  city            String
+  state           String
+  country         String       @default("India")
+  pincode         String
+  lat             Float
+  lng             Float
+  highway_tag     Boolean      @default(false)
+  checkInTime     String       @default("12:00")
+  checkOutTime    String       @default("11:00")
+  amenities       String[]
+  isApproved      Boolean      @default(false)
+  isActive        Boolean      @default(true)
+  ownerEnabled    Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  checkin_policy  String       @default("Check-in time is 12 PM")
+  checkout_policy String       @default("Check-out time is 11 AM")
+  images          HotelImage[]
+  rooms           Room[]
+  reviews         Review[]
+  rating_avg      Float
+  total_review    Int
+  license_number  String
+  gst_number      String
+  restaurant      Restaurant?
+  auditLogs       AuditLog[]
 }
 
 model HotelImage {
-  id          String   @id @default(cuid())
-  hotelId     String
-  hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  url         String
-  publicId    String?
-  caption     String?
-  sortOrder   Int      @default(0)
+  id           String   @id @default(cuid())
+  hotelId      String
+  hotel        Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  url          String
+  publicId     String?
+  caption      String?
+  sortOrder    Int      @default(0)
   uploadedById String?
-  uploadedBy  User?    @relation(fields: [uploadedById], references: [id])
-  createdAt   DateTime @default(now())
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
 }
 
 model Room {
-  id            String    @id @default(cuid())
-  hotelId       String
-  hotel         Hotel     @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  name          String
-  type          RoomType  @default(STANDARD)
-  description   String
-  available   Boolean   @default(true)
-  pricePerHour  Float
-  price_3h Float
-  price_6h Float
-  price_9h Float
-  price_12h Float
-  priceFullDay  Float
-  maxOccupancy  Int       @default(3)
-  amenities     String[]
-  images        String[]
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                  String     @id @default(cuid())
+  hotelId             String
+  hotel               Hotel      @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  name                String
+  type                RoomType   @default(STANDARD)
+  description         String
+  available           Boolean    @default(true)
+  pricePerHour        Float
+  price_3h            Float
+  price_6h            Float
+  price_9h            Float
+  price_12h           Float
+  priceFullDay        Float
+  maxOccupancy        Int        @default(3)
+  amenities           String[]
+  images              String[]
+  isActive            Boolean    @default(true)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
   base_clean_video_id String
   last_clean_video_id String
-  floor_number Int
-  area_sqft  Float
-  ai_clean_score Float
-  ai_last_checked_at DateTime
-  ai_clean_status String  @default("clean")
-  slots         RoomSlot[]
+  floor_number        Int
+  area_sqft           Float
+  ai_clean_score      Float
+  ai_last_checked_at  DateTime
+  ai_clean_status     String     @default("clean")
+  slots               RoomSlot[]
 }
 
 model RoomSlot {
-  id          String    @id @default(cuid())
-  roomId      String
-  room        Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  date        String
-  slotType    SlotType
-  startTime   String
-  endTime     String
-  isBooked    Boolean   @default(false)
-  createdAt   DateTime  @default(now())
+  id        String   @id @default(cuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  date      String
+  slotType  SlotType
+  startTime String
+  endTime   String
+  isBooked  Boolean  @default(false)
+  createdAt DateTime @default(now())
 
-  bookings    Booking[]
+  bookings Booking[]
 
   @@unique([roomId, date, slotType, startTime])
 }
 
 model Booking {
-  id            String        @id @default(cuid())
-  customerId    String
-  customer      User          @relation(fields: [customerId], references: [id])
-  roomSlotId    String
-  roomSlot      RoomSlot      @relation(fields: [roomSlotId], references: [id])
-  checkIn       DateTime
-  checkOut      DateTime
-  totalHours    Float
-  totalAmount   Float
-  status        BookingStatus @default(PENDING)
-  guestName     String
-  guestEmail    String
-  guestPhone    String
-  guestCount    Int           @default(1)
-  roomCount     Int           @default(1)
-  cancelledAt   DateTime?
+  id                 String        @id @default(cuid())
+  customerId         String
+  customer           User          @relation(fields: [customerId], references: [id])
+  roomSlotId         String
+  roomSlot           RoomSlot      @relation(fields: [roomSlotId], references: [id])
+  checkIn            DateTime
+  checkOut           DateTime
+  totalHours         Float
+  totalAmount        Float
+  status             BookingStatus @default(PENDING)
+  guestName          String
+  guestEmail         String
+  guestPhone         String
+  guestCount         Int           @default(1)
+  roomCount          Int           @default(1)
+  cancelledAt        DateTime?
   cancellationReason String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
-  payment       Payment?
-  extensions    BookingExtension[]
-  review        Review?
+  payment    Payment?
+  extensions BookingExtension[]
+  review     Review?
 
   @@index([roomSlotId, status])
 }
 
 model BookingExtension {
-  id                String   @id @default(cuid())
-  bookingId         String
-  booking           Booking  @relation(fields: [bookingId], references: [id])
-  addedHours        Float
-  additionalAmount  Float
-  newCheckout       DateTime
-  createdAt         DateTime @default(now())
+  id               String   @id @default(cuid())
+  bookingId        String
+  booking          Booking  @relation(fields: [bookingId], references: [id])
+  addedHours       Float
+  additionalAmount Float
+  newCheckout      DateTime
+  createdAt        DateTime @default(now())
 }
 
 model Payment {
@@ -238,72 +269,72 @@ model Payment {
 }
 
 model Review {
-  id          String   @id @default(cuid())
-  bookingId   String   @unique
-  booking     Booking  @relation(fields: [bookingId], references: [id])
-  customerId  String
-  customer    User     @relation(fields: [customerId], references: [id])
-  hotelId     String
-  hotel       Hotel    @relation(fields: [hotelId], references: [id])
-  rating      Int
-  title       String
-  body        String
-  ownerReply  String?
-  status      ReviewStatus @default(PUBLISHED)
+  id               String       @id @default(cuid())
+  bookingId        String       @unique
+  booking          Booking      @relation(fields: [bookingId], references: [id])
+  customerId       String
+  customer         User         @relation(fields: [customerId], references: [id])
+  hotelId          String
+  hotel            Hotel        @relation(fields: [hotelId], references: [id])
+  rating           Int
+  title            String
+  body             String
+  ownerReply       String?
+  status           ReviewStatus @default(PUBLISHED)
   moderationReason String?
-  moderatedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  moderatedAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
-  media       ReviewMedia[]
+  media ReviewMedia[]
 
   @@index([status, createdAt])
 }
 
 model ReviewMedia {
-  id        String    @id @default(cuid())
-  reviewId  String
-  review    Review    @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  url       String
-  type      MediaType @default(IMAGE)
+  id       String    @id @default(cuid())
+  reviewId String
+  review   Review    @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  url      String
+  type     MediaType @default(IMAGE)
 }
 
 model Restaurant {
-  id          String     @id @default(cuid())
-  hotelId     String     @unique
-  hotel       Hotel      @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  hotelId     String   @unique
+  hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   name        String
   description String?
-  isActive    Boolean    @default(true)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  menuItems   MenuItem[]
+  menuItems MenuItem[]
 }
 
 model MenuItem {
-  id            String     @id @default(cuid())
-  restaurantId  String
-  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  category      String
-  name          String
-  description   String?
-  price         Float
-  isVeg         Boolean    @default(false)
-  isAvailable   Boolean    @default(true)
-  imageUrl      String?
-  createdAt     DateTime   @default(now())
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  category     String
+  name         String
+  description  String?
+  price        Float
+  isVeg        Boolean    @default(false)
+  isAvailable  Boolean    @default(true)
+  imageUrl     String?
+  createdAt    DateTime   @default(now())
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  adminId     String
-  admin       User     @relation(fields: [adminId], references: [id])
-  action      String
-  targetType  String
-  targetId    String
-  hotelId     String?
-  hotel       Hotel?   @relation(fields: [hotelId], references: [id])
-  metadata    Json?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  adminId    String
+  admin      User     @relation(fields: [adminId], references: [id])
+  action     String
+  targetType String
+  targetId   String
+  hotelId    String?
+  hotel      Hotel?   @relation(fields: [hotelId], references: [id])
+  metadata   Json?
+  createdAt  DateTime @default(now())
 }

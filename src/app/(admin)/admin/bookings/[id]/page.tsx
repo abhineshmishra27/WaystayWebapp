@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast'
 import { prisma } from '@/lib/db'
 import { requireAdminSession } from '@/lib/admin-auth'
 import AdminCancelBookingButton from '@/components/admin/AdminCancelBookingButton'
+import { canCancelBooking } from '@/lib/booking-cancellation'
 
 function reasonFromMetadata(metadata: unknown) {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null
@@ -38,7 +39,7 @@ export default async function AdminBookingDetailPage({ params }: { params: Promi
   return (
     <div className="space-y-6">
       <Toaster />
-      <div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-2xl font-semibold text-gray-900">Booking details</h1><p className="mt-1 break-all font-mono text-xs text-gray-500">{booking.id}</p></div><div className="flex items-center gap-3"><span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">{booking.status}</span>{['PENDING', 'CONFIRMED'].includes(booking.status) && <AdminCancelBookingButton bookingId={booking.id} hotelName={hotel.name} paymentStatus={booking.payment?.status ?? null} />}</div></div>
+      <div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-2xl font-semibold text-gray-900">Booking details</h1><p className="mt-1 break-all font-mono text-xs text-gray-500">{booking.id}</p></div><div className="flex items-center gap-3"><span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">{booking.status}</span>{canCancelBooking(booking) ? <AdminCancelBookingButton bookingId={booking.id} hotelName={hotel.name} paymentStatus={booking.payment?.status ?? null} /> : ['PENDING', 'CONFIRMED'].includes(booking.status) ? <span className="text-xs font-medium text-gray-400">Cancellation closed</span> : null}</div></div>
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <section className="rounded-2xl border border-gray-100 bg-white p-5"><h2 className="font-semibold text-gray-900">Stay information</h2><dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2"><div><dt className="text-gray-400">Hotel</dt><dd className="mt-1"><Link href={`/admin/hotels/${hotel.id}`} className="font-medium text-indigo-600 hover:underline">{hotel.name}</Link><p className="text-xs text-gray-500">{hotel.address}, {hotel.city}, {hotel.state}</p></dd></div><div><dt className="text-gray-400">Room / slot</dt><dd className="mt-1 text-gray-800">{booking.roomSlot.room.name} · {booking.roomSlot.slotType}</dd><dd className="text-xs text-gray-500">{booking.roomSlot.date} · {booking.roomSlot.startTime}–{booking.roomSlot.endTime}</dd></div><div><dt className="text-gray-400">Check-in</dt><dd className="mt-1 text-gray-800">{booking.checkIn.toLocaleString('en-IN')}</dd></div><div><dt className="text-gray-400">Check-out</dt><dd className="mt-1 text-gray-800">{booking.checkOut.toLocaleString('en-IN')}</dd></div><div><dt className="text-gray-400">Duration</dt><dd className="mt-1 text-gray-800">{booking.totalHours} hours</dd></div><div><dt className="text-gray-400">Party</dt><dd className="mt-1 text-gray-800">{booking.guestCount} guests · {booking.roomCount} rooms</dd></div></dl></section>

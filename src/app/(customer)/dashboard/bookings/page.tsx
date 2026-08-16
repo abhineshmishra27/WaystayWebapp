@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import toast, { Toaster } from 'react-hot-toast'
+import { canCancelBooking } from '@/lib/booking-cancellation'
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-amber-50 text-amber-700',
@@ -14,6 +15,8 @@ interface BookingSummary {
   id: string
   status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'
   totalAmount: number
+  checkIn: string
+  checkOut: string
   createdAt: string
   review: { id: string } | null
   roomSlot: {
@@ -45,13 +48,15 @@ export default function BookingsPage() {
       setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'CANCELLED' } : b))
       toast.success('Booking cancelled')
     } else {
-      toast.error('Failed to cancel booking')
+      const data = await res.json().catch(() => null)
+      toast.error(data?.error || 'Failed to cancel booking')
     }
   }
 
   const filtered = bookings.filter((b) => {
-    if (tab === 'upcoming') return ['PENDING', 'CONFIRMED'].includes(b.status)
-    if (tab === 'past') return ['COMPLETED', 'CANCELLED'].includes(b.status)
+    const hasEnded = new Date(b.checkOut).getTime() <= Date.now()
+    if (tab === 'upcoming') return ['PENDING', 'CONFIRMED'].includes(b.status) && !hasEnded
+    if (tab === 'past') return ['COMPLETED', 'CANCELLED'].includes(b.status) || hasEnded
     return true
   })
 
@@ -86,6 +91,7 @@ export default function BookingsPage() {
               const paymentLabel = b.payment
                 ? b.payment.status === 'SUCCESS' ? 'Paid online' : `Payment ${b.payment.status.toLowerCase()}`
                 : 'Pay at hotel'
+              const cancellationAllowed = canCancelBooking(b)
               return (
                 <div key={b.id} className="bg-white rounded-2xl border border-gray-100 p-6">
                   <div className="flex items-start justify-between mb-4">
@@ -110,9 +116,12 @@ export default function BookingsPage() {
                         <Link href={`/dashboard/bookings/${b.id}/review`}
                           className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-100 font-medium">Write a review</Link>
                       )}
-                      {['PENDING', 'CONFIRMED'].includes(b.status) && (
+                      {cancellationAllowed && (
                         <button onClick={() => handleCancel(b.id)}
                           className="text-xs text-red-500 border border-red-100 px-3 py-1.5 rounded-lg hover:bg-red-50">Cancel</button>
+                      )}
+                      {!cancellationAllowed && ['PENDING', 'CONFIRMED'].includes(b.status) && new Date(b.checkIn).getTime() <= Date.now() && (
+                        <span className="text-xs font-medium text-gray-400">Cancellation closed</span>
                       )}
                     </div>
                   </div>
