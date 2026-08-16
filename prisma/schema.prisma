@@ -178,7 +178,7 @@ model RoomSlot {
   isBooked    Boolean   @default(false)
   createdAt   DateTime  @default(now())
 
-  booking     Booking?
+  bookings    Booking[]
 
   @@unique([roomId, date, slotType, startTime])
 }
@@ -187,7 +187,7 @@ model Booking {
   id            String        @id @default(cuid())
   customerId    String
   customer      User          @relation(fields: [customerId], references: [id])
-  roomSlotId    String        @unique
+  roomSlotId    String
   roomSlot      RoomSlot      @relation(fields: [roomSlotId], references: [id])
   checkIn       DateTime
   checkOut      DateTime
@@ -207,6 +207,8 @@ model Booking {
   payment       Payment?
   extensions    BookingExtension[]
   review        Review?
+
+  @@index([roomSlotId, status])
 }
 
 model BookingExtension {

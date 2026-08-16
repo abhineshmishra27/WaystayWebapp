@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { bookingConflictsWithRequest, dateRangeStrings } from '@/lib/booking-inventory'
 
 function distanceKm(fromLat: number, fromLng: number, toLat: number, toLng: number) {
   const earthRadiusKm = 6371
@@ -103,14 +104,27 @@ export async function GET(req: NextRequest) {
               roomId: room.id,
               date: { gte: startDate, lte: slotType === 'FULLDAY' ? endDate : startDate },
               slotType,
-              isBooked: false,
             },
-            select: { date: true },
+            select: { date: true, slotType: true, startTime: true, endTime: true },
           })
-          const requiredDays = slotType === 'FULLDAY'
-            ? Math.floor((new Date(`${endDate}T00:00:00`).getTime() - new Date(`${startDate}T00:00:00`).getTime()) / 86400000) + 1
-            : 1
-          if (matchingSlots.length >= requiredDays) {
+          const activeBookings = await prisma.booking.findMany({
+            where: { status: { in: ['PENDING', 'CONFIRMED'] }, roomSlot: { roomId: room.id } },
+            select: { totalHours: true, roomSlot: { select: { date: true, slotType: true, startTime: true, endTime: true } } },
+          })
+          const requestedDates = slotType === 'FULLDAY' ? dateRangeStrings(startDate, endDate) : [startDate]
+          const startCandidates = matchingSlots.filter(candidate => candidate.date === startDate)
+          const hasAvailableCandidate = startCandidates.some(candidate => {
+            const hasEveryDate = requestedDates.every(date => matchingSlots.some(slot =>
+              slot.date === date && slot.startTime === candidate.startTime && slot.endTime === candidate.endTime
+            ))
+            return hasEveryDate && !activeBookings.some(booking => bookingConflictsWithRequest(booking, {
+              dates: requestedDates,
+              slotType: candidate.slotType,
+              startTime: candidate.startTime,
+              endTime: candidate.endTime,
+            }))
+          })
+          if (hasAvailableCandidate) {
             availableHotelIds.push(hotel.id)
             break
           }

@@ -20,7 +20,7 @@
     --badge-soft:#FFF3EA;
   }
   *{ -webkit-tap-highlight-color: transparent; }
-  body{ font-family:'Inter',system-ui,sans-serif; background:var(--base-light); color:var(--trust-blue); }
+  body{ font-family:'Inter',system-ui,sans-serif; background:var(--base-light); color:var(--trust-blue); overflow-x:hidden; }
   .font-display{ font-family:'Poppins',system-ui,sans-serif; }
   .font-led{ font-family:'Space Mono',monospace; letter-spacing:0.02em; }
   .hero-journey{
@@ -90,9 +90,34 @@
     .cta-pulse{ animation:none; }
   }
 
-  /* keep space for fixed mobile search bar */
+  .stay-mode-btn[data-active="true"]{
+    background:#fff; color:var(--trust-blue); box-shadow:0 2px 8px rgba(10,37,64,0.14);
+  }
+  .stay-mode-btn[data-active="false"]{
+    background:transparent; color:#CBD5E1;
+  }
+
+  .search-field-label{
+    display:block; font-size:0.65rem; line-height:1; font-weight:800;
+    letter-spacing:0.06em; text-transform:uppercase; color:#C2410C;
+    margin-bottom:0.35rem;
+  }
+
+  .landing-date-input{
+    width:100%; min-width:0; background:transparent; color:var(--trust-blue);
+    font-weight:700; font-size:0.875rem; outline:none; color-scheme:light;
+  }
+
+  .mode-fields[aria-hidden="true"]{ display:none !important; }
+  #hourlyFields[aria-hidden="false"]{ display:contents; }
+  #nightFields[aria-hidden="false"]{ display:grid; }
+  @media (min-width:768px){
+    #nightFields[aria-hidden="false"]{ display:contents; }
+  }
+
+  /* keep space for the expanded fixed mobile search panel */
   @media (max-width: 767px){
-    body{ padding-bottom: 76px; }
+    body{ padding-bottom: 258px; }
   }
 </style>
 </head>
@@ -125,46 +150,67 @@
   </div>
 </header>
 
-<!-- STICKY / BOTTOM-DOCKED SEARCH BAR -->
-<div class="fixed bottom-0 left-0 right-0 md:sticky md:top-0 z-40 bg-[var(--trust-blue)] shadow-[0_-2px_12px_rgba(0,0,0,0.15)] md:shadow-md">
-  <div class="max-w-6xl mx-auto px-3 py-3 flex items-stretch gap-2">
-    <label class="flex-1 flex items-center gap-3 rounded-xl border border-[#FFE8D6] bg-[#FFF3EA] px-4 py-3 shadow-lg shadow-black/10">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" class="shrink-0"><path d="M21 21l-4.3-4.3M19 11a8 8 0 11-16 0 8 8 0 0116 0z" stroke="#FF6B00" stroke-width="2.2" stroke-linecap="round"/></svg>
-      <span class="hidden sm:flex flex-col leading-tight">
-        <span class="text-[11px] font-bold uppercase tracking-wide text-[var(--alert-orange-dark)]">Search stop</span>
-      </span>
-      <input id="landingSearchInput" type="text" placeholder="Highway, city, or NH number" class="bg-transparent text-[var(--trust-blue)] placeholder-slate-500 text-base md:text-lg font-semibold outline-none w-full">
-    </label>
-    <div id="datePickerWrap" class="relative hidden sm:block">
-      <button id="datePickerButton" type="button" class="flex h-full items-center gap-2 rounded-xl border border-[#FFE8D6] bg-[#FFF3EA] px-4 py-3 text-sm font-bold text-[var(--trust-blue)] shadow-lg shadow-black/10 whitespace-nowrap hover:border-[var(--alert-orange)] hover:bg-white transition">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M8 7V3m8 4V3M4 11h16M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke="#FF6B00" stroke-width="2" stroke-linecap="round"/></svg>
-        <span id="selectedDateLabel">Today</span>
+<!-- STICKY / BOTTOM-DOCKED STAY SEARCH -->
+<div class="fixed bottom-0 left-0 right-0 md:sticky md:top-0 z-40 bg-[var(--trust-blue)] shadow-[0_-2px_12px_rgba(0,0,0,0.18)] md:shadow-md">
+  <div class="max-w-6xl mx-auto px-3 py-3">
+    <div id="stayModeToggle" data-mode="hourly" class="mb-2 inline-flex w-full rounded-xl bg-[#061C31] p-1 sm:w-auto" role="tablist" aria-label="Choose stay type">
+      <button id="hourlyModeButton" type="button" data-stay-mode="hourly" data-active="true" role="tab" aria-selected="true" class="stay-mode-btn min-w-0 flex-1 rounded-lg px-3 py-2 text-sm font-bold transition sm:flex-none sm:px-4">
+        Hourly Stays <span class="hidden lg:inline font-normal opacity-70">· 3, 6 or 12 hours</span>
       </button>
-      <input id="landingDateInput" type="hidden" value="">
-      <div id="dateCalendar" class="absolute right-0 top-[calc(100%+8px)] z-50 hidden w-72 rounded-xl border border-[#FFE8D6] bg-white p-3 shadow-xl">
-        <div class="mb-3 flex items-center justify-between">
-          <button id="calendarPrev" type="button" class="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--trust-blue)] hover:bg-[#FFF3EA]">‹</button>
-          <p id="calendarMonthLabel" class="text-sm font-bold text-[var(--trust-blue)]"></p>
-          <button id="calendarNext" type="button" class="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--trust-blue)] hover:bg-[#FFF3EA]">›</button>
-        </div>
-        <div class="grid grid-cols-7 gap-1 text-center text-[11px] font-bold uppercase tracking-wide text-slate-400">
-          <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-        </div>
-        <div id="calendarDays" class="mt-1 grid grid-cols-7 gap-1"></div>
-      </div>
+      <button id="nightModeButton" type="button" data-stay-mode="night" data-active="false" role="tab" aria-selected="false" class="stay-mode-btn min-w-0 flex-1 rounded-lg px-3 py-2 text-sm font-bold transition sm:flex-none sm:px-4">
+        By Night <span class="hidden lg:inline font-normal opacity-70">· Standard overnight stay</span>
+      </button>
     </div>
-    <div class="hidden md:flex items-center gap-3 rounded-xl border border-[#FFE8D6] bg-[#FFF3EA] px-3 py-2 text-[var(--trust-blue)] shadow-lg shadow-black/10">
-      <div class="flex items-center gap-2">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M16 21v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2M9.5 11a4 4 0 100-8 4 4 0 000 8zM21 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="#FF6B00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span class="text-sm font-bold">Guests</span>
+
+    <div class="grid grid-cols-2 gap-2 md:flex md:items-stretch">
+      <label class="col-span-2 flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-[#FFE8D6] bg-[#FFF3EA] px-3 py-2.5 shadow-lg shadow-black/10 md:col-span-1">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" class="shrink-0"><path d="M21 21l-4.3-4.3M19 11a8 8 0 11-16 0 8 8 0 0116 0z" stroke="#FF6B00" stroke-width="2.2" stroke-linecap="round"/></svg>
+        <span class="min-w-0 flex-1">
+          <span class="search-field-label">Where</span>
+          <input id="landingSearchInput" type="text" placeholder="City, area or highway" class="w-full bg-transparent text-sm font-semibold text-[var(--trust-blue)] placeholder-slate-500 outline-none md:text-base">
+        </span>
+      </label>
+
+      <div id="hourlyFields" aria-hidden="false" class="mode-fields">
+        <label class="rounded-xl border border-[#FFE8D6] bg-[#FFF3EA] px-3 py-2.5 shadow-lg shadow-black/10 md:w-44">
+          <span class="search-field-label">Stay date</span>
+          <input id="landingDateInput" type="date" class="landing-date-input">
+        </label>
+        <label class="rounded-xl border border-[#FFE8D6] bg-[#FFF3EA] px-3 py-2.5 shadow-lg shadow-black/10 md:w-40">
+          <span class="search-field-label">Duration</span>
+          <select id="landingDuration" class="w-full bg-transparent text-sm font-bold text-[var(--trust-blue)] outline-none">
+            <option value="H3">3 hours</option>
+            <option value="H6">6 hours</option>
+            <option value="H12">12 hours</option>
+          </select>
+        </label>
       </div>
-      <div class="flex items-center gap-2">
-        <button id="guestMinus" type="button" class="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-lg font-bold text-[var(--trust-blue)] hover:bg-[#FFE8D6]">−</button>
-        <span id="guestCount" class="w-5 text-center text-sm font-bold">1</span>
-        <button id="guestPlus" type="button" class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--alert-orange)] text-lg font-bold text-white hover:bg-[var(--alert-orange-dark)]">+</button>
+
+      <div id="nightFields" aria-hidden="true" class="mode-fields col-span-2 grid-cols-2 gap-2">
+        <label class="rounded-xl border border-[#FFE8D6] bg-[#FFF3EA] px-3 py-2.5 shadow-lg shadow-black/10 md:w-44">
+          <span class="search-field-label">Check-in</span>
+          <input id="landingCheckIn" type="date" class="landing-date-input">
+        </label>
+        <label class="rounded-xl border border-[#FFE8D6] bg-[#FFF3EA] px-3 py-2.5 shadow-lg shadow-black/10 md:w-44">
+          <span class="search-field-label">Check-out</span>
+          <input id="landingCheckOut" type="date" class="landing-date-input">
+        </label>
       </div>
+
+      <div class="hidden items-center gap-2 rounded-xl border border-[#FFE8D6] bg-[#FFF3EA] px-3 py-2 text-[var(--trust-blue)] shadow-lg shadow-black/10 lg:flex">
+        <div>
+          <span class="search-field-label">Guests</span>
+          <span class="text-sm font-bold"><span id="guestCount">1</span> guest</span>
+        </div>
+        <button id="guestMinus" type="button" aria-label="Remove guest" class="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-lg font-bold hover:bg-[#FFE8D6]">−</button>
+        <button id="guestPlus" type="button" aria-label="Add guest" class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--alert-orange)] text-lg font-bold text-white hover:bg-[var(--alert-orange-dark)]">+</button>
+      </div>
+
+      <a id="landingSearchSubmit" href="/hotels" target="_top" class="col-span-2 flex min-w-36 items-center justify-center rounded-xl bg-[var(--alert-orange)] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-black/10 transition hover:bg-[var(--alert-orange-dark)] md:col-span-1">
+        Search hourly stays
+      </a>
     </div>
-    <a id="landingSearchSubmit" href="/hotels" target="_top" class="flex items-center justify-center bg-[var(--alert-orange)] text-white text-sm font-bold px-5 py-3 rounded-xl whitespace-nowrap shadow-lg shadow-black/10 hover:bg-[var(--alert-orange-dark)] transition">Search</a>
+    <p id="nightStaySummary" class="mt-2 hidden text-center text-xs font-semibold text-[#FFD3B5] md:text-left">Choose checkout to see the number of nights.</p>
   </div>
 </div>
 
@@ -453,22 +499,19 @@
 
   const searchInput = document.getElementById('landingSearchInput');
   const searchSubmit = document.getElementById('landingSearchSubmit');
-  const dateWrap = document.getElementById('datePickerWrap');
   const dateInput = document.getElementById('landingDateInput');
-  const dateButton = document.getElementById('datePickerButton');
-  const dateCalendar = document.getElementById('dateCalendar');
-  const selectedDateLabel = document.getElementById('selectedDateLabel');
-  const calendarDays = document.getElementById('calendarDays');
-  const calendarMonthLabel = document.getElementById('calendarMonthLabel');
-  const calendarPrev = document.getElementById('calendarPrev');
-  const calendarNext = document.getElementById('calendarNext');
+  const durationInput = document.getElementById('landingDuration');
+  const checkInInput = document.getElementById('landingCheckIn');
+  const checkOutInput = document.getElementById('landingCheckOut');
+  const hourlyFields = document.getElementById('hourlyFields');
+  const nightFields = document.getElementById('nightFields');
+  const stayModeToggle = document.getElementById('stayModeToggle');
+  const nightStaySummary = document.getElementById('nightStaySummary');
   const guestMinus = document.getElementById('guestMinus');
   const guestPlus = document.getElementById('guestPlus');
   const guestCountEl = document.getElementById('guestCount');
 
-  let selectedDate = new Date();
-  selectedDate.setHours(0, 0, 0, 0);
-  let calendarCursor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+  let stayMode = 'hourly';
   let guestCount = 1;
 
   function toDateValue(date) {
@@ -478,11 +521,17 @@
     return `${year}-${month}-${day}`;
   }
 
-  function formatDateLabel(date) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (date.getTime() === today.getTime()) return 'Today';
-    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  function addDays(date, numberOfDays) {
+    const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    result.setDate(result.getDate() + numberOfDays);
+    return result;
+  }
+
+  function nightsBetween(checkIn, checkOut) {
+    if (!checkIn || !checkOut) return 0;
+    const start = new Date(`${checkIn}T00:00:00`);
+    const end = new Date(`${checkOut}T00:00:00`);
+    return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
   }
 
   function updateSearchHref() {
@@ -490,92 +539,111 @@
     const params = new URLSearchParams();
     const query = searchInput?.value?.trim();
     if (query) params.set('city', query);
-    if (dateInput?.value) {
-      params.set('date', dateInput.value);
-      params.set('startDate', dateInput.value);
-      params.set('endDate', dateInput.value);
+
+    if (stayMode === 'night') {
+      if (checkInInput?.value) {
+        params.set('date', checkInInput.value);
+        params.set('startDate', checkInInput.value);
+      }
+      if (checkOutInput?.value) params.set('endDate', checkOutInput.value);
+      params.set('mode', 'night');
+      params.set('slot', 'FULLDAY');
+    } else {
+      if (dateInput?.value) {
+        params.set('date', dateInput.value);
+        params.set('startDate', dateInput.value);
+        params.set('endDate', dateInput.value);
+      }
+      params.set('mode', 'hourly');
+      params.set('slot', durationInput?.value || 'H3');
     }
-    params.set('slot', 'H3');
+
     params.set('guestCount', String(guestCount));
     params.set('roomCount', String(Math.max(1, Math.ceil(guestCount / 3))));
-    searchSubmit.href = `/hotels${params.toString() ? `?${params}` : ''}`;
+    searchSubmit.href = `/hotels?${params}`;
   }
 
-  function setSelectedDate(date) {
-    selectedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    if (dateInput) dateInput.value = toDateValue(selectedDate);
-    if (selectedDateLabel) selectedDateLabel.textContent = formatDateLabel(selectedDate);
+  function updateNightSummary() {
+    if (!nightStaySummary) return;
+    const nights = nightsBetween(checkInInput?.value, checkOutInput?.value);
+    if (!checkOutInput?.value) {
+      nightStaySummary.textContent = 'Choose checkout to see the number of nights.';
+      return;
+    }
+    nightStaySummary.textContent = nights > 0
+      ? `${nights} ${nights === 1 ? 'night' : 'nights'} selected · Prices will be shown per night.`
+      : 'Checkout must be after check-in.';
+  }
+
+  function setStayMode(mode) {
+    stayMode = mode === 'night' ? 'night' : 'hourly';
+    stayModeToggle?.setAttribute('data-mode', stayMode);
+    stayModeToggle?.querySelectorAll('[data-stay-mode]').forEach(button => {
+      const isActive = button.dataset.stayMode === stayMode;
+      button.dataset.active = String(isActive);
+      button.setAttribute('aria-selected', String(isActive));
+    });
+
+    hourlyFields?.setAttribute('aria-hidden', String(stayMode === 'night'));
+    nightFields?.setAttribute('aria-hidden', String(stayMode !== 'night'));
+    nightStaySummary?.classList.toggle('hidden', stayMode !== 'night');
+    if (searchSubmit) searchSubmit.textContent = stayMode === 'night' ? 'Search by-night stays' : 'Search hourly stays';
+
+    const matchingInventoryMode = stayMode === 'night' ? 'night' : 'day';
+    const inventoryToggle = document.getElementById('velocityToggle');
+    const inventoryGrid = document.getElementById('grid');
+    inventoryToggle?.querySelectorAll('[data-set]').forEach(button => {
+      button.dataset.active = String(button.dataset.set === matchingInventoryMode);
+    });
+    if (inventoryGrid) inventoryGrid.dataset.mode = matchingInventoryMode;
+    inventoryToggle?.querySelector(`[data-set="${matchingInventoryMode}"]`)?.click();
+    updateNightSummary();
     updateSearchHref();
   }
 
-  function renderCalendar() {
-    if (!calendarDays || !calendarMonthLabel) return;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayValue = toDateValue(today);
+  const tomorrowValue = toDateValue(addDays(today, 1));
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const year = calendarCursor.getFullYear();
-    const month = calendarCursor.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    calendarMonthLabel.textContent = calendarCursor.toLocaleDateString(undefined, {
-      month: 'long',
-      year: 'numeric',
-    });
-    calendarDays.innerHTML = '';
-
-    for (let i = 0; i < firstDay; i++) {
-      calendarDays.appendChild(document.createElement('span'));
-    }
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month, day);
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'calendar-day';
-      button.textContent = String(day);
-      button.disabled = date < today;
-      button.dataset.selected = String(date.getTime() === selectedDate.getTime());
-      button.addEventListener('click', () => {
-        setSelectedDate(date);
-        dateCalendar?.classList.add('hidden');
-        renderCalendar();
-      });
-      calendarDays.appendChild(button);
-    }
+  if (dateInput) {
+    dateInput.min = todayValue;
+    dateInput.value = todayValue;
+  }
+  if (checkInInput) {
+    checkInInput.min = todayValue;
+    checkInInput.value = todayValue;
+  }
+  if (checkOutInput) {
+    checkOutInput.min = tomorrowValue;
+    checkOutInput.value = tomorrowValue;
   }
 
-  if (dateInput && selectedDateLabel) {
-    setSelectedDate(selectedDate);
-    renderCalendar();
+  stayModeToggle?.querySelectorAll('[data-stay-mode]').forEach(button => {
+    button.addEventListener('click', () => setStayMode(button.dataset.stayMode));
+  });
 
-    dateButton?.addEventListener('click', () => {
-      dateCalendar?.classList.toggle('hidden');
-      renderCalendar();
-    });
-
-    calendarPrev?.addEventListener('click', () => {
-      const previous = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() - 1, 1);
-      const currentMonth = new Date();
-      currentMonth.setDate(1);
-      currentMonth.setHours(0, 0, 0, 0);
-      if (previous >= currentMonth) {
-        calendarCursor = previous;
-        renderCalendar();
+  dateInput?.addEventListener('change', updateSearchHref);
+  durationInput?.addEventListener('change', updateSearchHref);
+  checkInInput?.addEventListener('change', () => {
+    if (!checkInInput.value) return;
+    const earliestCheckout = toDateValue(addDays(new Date(`${checkInInput.value}T00:00:00`), 1));
+    if (checkOutInput) {
+      checkOutInput.min = earliestCheckout;
+      if (!checkOutInput.value || checkOutInput.value < earliestCheckout) {
+        checkOutInput.value = earliestCheckout;
       }
-    });
+    }
+    updateNightSummary();
+    updateSearchHref();
+  });
+  checkOutInput?.addEventListener('change', () => {
+    updateNightSummary();
+    updateSearchHref();
+  });
 
-    calendarNext?.addEventListener('click', () => {
-      calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + 1, 1);
-      renderCalendar();
-    });
-
-    document.addEventListener('mousedown', (event) => {
-      if (dateWrap && !dateWrap.contains(event.target)) {
-        dateCalendar?.classList.add('hidden');
-      }
-    });
-  }
+  const requestedMode = new URLSearchParams(window.location.search).get('mode');
+  setStayMode(requestedMode === 'night' ? 'night' : 'hourly');
 
   function updateGuests() {
     if (guestCountEl) guestCountEl.textContent = String(guestCount);
@@ -749,15 +817,26 @@
 
   function getNearMeParams() {
     const params = new URLSearchParams();
-    const searchDate = dateInput?.value || toDateValue(new Date());
     params.set('lat', '');
     params.set('lng', '');
     params.set('radius', '50');
     params.set('nearMe', '1');
-    params.set('date', searchDate);
-    params.set('startDate', searchDate);
-    params.set('endDate', searchDate);
-    params.set('slot', 'H3');
+    if (stayMode === 'night') {
+      const checkIn = checkInInput?.value || toDateValue(new Date());
+      const checkOut = checkOutInput?.value || toDateValue(addDays(new Date(), 1));
+      params.set('mode', 'night');
+      params.set('date', checkIn);
+      params.set('startDate', checkIn);
+      params.set('endDate', checkOut);
+      params.set('slot', 'FULLDAY');
+    } else {
+      const searchDate = dateInput?.value || toDateValue(new Date());
+      params.set('mode', 'hourly');
+      params.set('date', searchDate);
+      params.set('startDate', searchDate);
+      params.set('endDate', searchDate);
+      params.set('slot', durationInput?.value || 'H3');
+    }
     params.set('guestCount', String(guestCount));
     params.set('roomCount', String(Math.max(1, Math.ceil(guestCount / 3))));
     return params;

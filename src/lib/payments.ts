@@ -1,23 +1,6 @@
 import { prisma } from '@/lib/db'
 import { getRazorpay } from '@/lib/razorpay'
-
-function dateRange(start: Date, end: Date) {
-  const dates: string[] = []
-  const current = new Date(start)
-  current.setHours(0, 0, 0, 0)
-  const last = new Date(end)
-  last.setHours(0, 0, 0, 0)
-
-  while (current <= last) {
-    const year = current.getFullYear()
-    const month = String(current.getMonth() + 1).padStart(2, '0')
-    const day = String(current.getDate()).padStart(2, '0')
-    dates.push(`${year}-${month}-${day}`)
-    current.setDate(current.getDate() + 1)
-  }
-
-  return dates
-}
+import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-db'
 
 export async function getPendingRazorpayBooking(bookingId: string, customerId?: string) {
   const booking = await prisma.booking.findUnique({
@@ -120,6 +103,7 @@ export async function failPendingRazorpayPayment({
   }
 
   return prisma.$transaction(async (tx) => {
+    await lockRoomInventory(tx, payment.booking.roomSlot.roomId)
     const paymentUpdate = await tx.payment.updateMany({
       where: { id: payment.id, status: 'PENDING' },
       data: {
@@ -133,17 +117,7 @@ export async function failPendingRazorpayPayment({
       where: { id: payment.bookingId },
       data: { status: 'CANCELLED' },
     })
-    await tx.roomSlot.updateMany({
-      where: payment.booking.roomSlot.slotType === 'FULLDAY'
-        ? {
-            roomId: payment.booking.roomSlot.roomId,
-            date: { in: dateRange(payment.booking.checkIn, payment.booking.checkOut) },
-            slotType: 'FULLDAY',
-            startTime: payment.booking.roomSlot.startTime,
-          }
-        : { id: payment.booking.roomSlotId },
-      data: { isBooked: false },
-    })
+    await releaseBookingSlots(tx, payment.booking)
     return true
   })
 }

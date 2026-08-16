@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
+import { slotIsUnavailable } from '@/lib/booking-inventory'
 
 function todayInIndia() {
   const parts = new Intl.DateTimeFormat('en', {
@@ -36,10 +37,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
       where.date = { gte: today }
     }
 
-    const slots = await prisma.roomSlot.findMany({
-      where,
-      orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
-    })
+    const [slots, activeBookings] = await Promise.all([
+      prisma.roomSlot.findMany({
+        where,
+        orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+      }),
+      prisma.booking.findMany({
+        where: {
+          status: { in: ['PENDING', 'CONFIRMED'] },
+          roomSlot: { roomId, date: { lte: effectiveEndDate } },
+        },
+        select: {
+          totalHours: true,
+          roomSlot: { select: { date: true, slotType: true, startTime: true, endTime: true } },
+        },
+      }),
+    ])
 
     const availability = slots.reduce<Record<string, Array<{ id: string; date: string; startTime: string; endTime: string; slotType: string; isBooked: boolean }>>>(
       (acc, slot) => {
@@ -51,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
           startTime: slot.startTime,
           endTime: slot.endTime,
           slotType: slot.slotType,
-          isBooked: slot.isBooked,
+          isBooked: slotIsUnavailable(slot, activeBookings, slot.slotType === 'FULLDAY' ? effectiveEndDate : slot.date),
         })
         return acc
       },

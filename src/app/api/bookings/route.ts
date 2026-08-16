@@ -8,6 +8,8 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
+import { bookingConflictsWithRequest, dateRangeStrings } from '@/lib/booking-inventory'
+import { lockRoomInventory } from '@/lib/booking-inventory-db'
 
 const createBookingSchema = z.object({
   slotId: z.string(),
@@ -22,18 +24,6 @@ const createBookingSchema = z.object({
   totalAmount: z.number().positive(),
   paymentMethod: z.enum(['RAZORPAY', 'PAY_AT_HOTEL']).default('RAZORPAY'),
 })
-
-function dateRange(startDate: string, endDate: string) {
-  const dates: string[] = []
-  const start = new Date(`${startDate}T00:00:00`)
-  const end = new Date(`${endDate}T00:00:00`)
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return dates
-
-  for (const current = new Date(start); current <= end; current.setDate(current.getDate() + 1)) {
-    dates.push(current.toISOString().split('T')[0])
-  }
-  return dates
-}
 
 function todayInIndia() {
   const parts = new Intl.DateTimeFormat('en', {
@@ -64,8 +54,10 @@ function isBookingConflict(error: Error) {
     'Invalid booking date range',
     'Past dates cannot be booked',
     'Selected slot does not match the booking date',
+    'Selected slot type does not match the booking request',
     'Multi-day bookings require a full-day slot',
     'One or more selected dates are no longer available',
+    'This time overlaps another booking',
     'Payment gateway authentication failed',
   ].includes(error.message) || error.message.startsWith('Selected guests require at least')
 }
@@ -136,7 +128,7 @@ export async function POST(req: NextRequest) {
       // Lock the slot
       const slot = await tx.roomSlot.findUnique({ where: { id: slotId }, include: { room: true } })
       if (!slot) throw new Error('Slot not found')
-      if (slot.isBooked) throw new Error('This slot is no longer available')
+      await lockRoomInventory(tx, slot.roomId)
       const maxGuestsPerRoom = Math.max(1, Math.min(slot.room.maxOccupancy, 3))
       const requiredRooms = Math.ceil(guestCount / maxGuestsPerRoom)
       if (roomCount < requiredRooms) {
@@ -145,12 +137,29 @@ export async function POST(req: NextRequest) {
 
       const rangeStart = startDate ?? slot.date
       const rangeEnd = endDate ?? rangeStart
-      const dates = dateRange(rangeStart, rangeEnd)
+      const dates = dateRangeStrings(rangeStart, rangeEnd)
       if (dates.length === 0) throw new Error('Invalid booking date range')
       if (rangeStart < todayInIndia()) throw new Error('Past dates cannot be booked')
       if (slot.date !== rangeStart) throw new Error('Selected slot does not match the booking date')
+      if (slotType && slot.slotType !== slotType) throw new Error('Selected slot type does not match the booking request')
       if (dates.length > 1 && (slotType !== 'FULLDAY' || slot.slotType !== 'FULLDAY')) {
         throw new Error('Multi-day bookings require a full-day slot')
+      }
+
+      const activeBookings = await tx.booking.findMany({
+        where: { status: { in: ['PENDING', 'CONFIRMED'] }, roomSlot: { roomId: slot.roomId } },
+        select: {
+          totalHours: true,
+          roomSlot: { select: { date: true, slotType: true, startTime: true, endTime: true } },
+        },
+      })
+      if (activeBookings.some(booking => bookingConflictsWithRequest(booking, {
+        dates,
+        slotType: slot.slotType,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+      }))) {
+        throw new Error('This time overlaps another booking')
       }
 
       if (dates.length > 1) {
@@ -160,7 +169,7 @@ export async function POST(req: NextRequest) {
             date: { in: dates },
             slotType: 'FULLDAY',
             startTime: slot.startTime,
-            isBooked: false,
+            endTime: slot.endTime,
           },
         })
 

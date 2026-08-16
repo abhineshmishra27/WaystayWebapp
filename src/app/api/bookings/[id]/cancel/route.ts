@@ -5,19 +5,7 @@ import { getRazorpay } from '@/lib/razorpay'
 import { sendBookingCancellation } from '@/lib/email'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
-
-function dateRange(start: Date, end: Date) {
-  const dates: string[] = []
-  const startDate = new Date(start)
-  startDate.setHours(0, 0, 0, 0)
-  const endDate = new Date(end)
-  endDate.setHours(0, 0, 0, 0)
-
-  for (const current = new Date(startDate); current <= endDate; current.setDate(current.getDate() + 1)) {
-    dates.push(current.toISOString().split('T')[0])
-  }
-  return dates
-}
+import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-db'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -78,6 +66,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const cancelledAt = new Date()
     await prisma.$transaction(async tx => {
+      await lockRoomInventory(tx, booking.roomSlot.roomId)
       const changed = await tx.booking.updateMany({
         where: { id, status: { in: ['PENDING', 'CONFIRMED'] } },
         data: { status: 'CANCELLED', cancelledAt, cancellationReason: 'Cancelled by customer' },
@@ -86,17 +75,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (booking.payment?.status === 'PENDING') {
         await tx.payment.updateMany({ where: { id: booking.payment.id, status: 'PENDING' }, data: { status: 'FAILED' } })
       }
-      await tx.roomSlot.updateMany({
-        where: booking.roomSlot.slotType === 'FULLDAY'
-          ? {
-              roomId: booking.roomSlot.roomId,
-              date: { in: dateRange(booking.checkIn, booking.checkOut) },
-              slotType: 'FULLDAY',
-              startTime: booking.roomSlot.startTime,
-            }
-          : { id: booking.roomSlotId },
-        data: { isBooked: false },
-      })
+      await releaseBookingSlots(tx, booking)
     })
 
     try {

@@ -8,6 +8,7 @@
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
+    "test:booking-inventory": "node --no-warnings --test tests/booking-inventory.test.mts",
     "rbac:ensure-primary-admin": "node scripts/ensure-primary-admin.js"
   },
   "dependencies": {

@@ -6,28 +6,12 @@ import { getRazorpay } from '@/lib/razorpay'
 import { sendBookingCancellation } from '@/lib/email'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { PERMISSIONS } from '@/lib/rbac'
+import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-db'
 
 const schema = z.object({
   reason: z.string().trim().min(5).max(500),
   confirmation: z.literal('CANCEL_BOOKING'),
 }).strict()
-
-function dateRange(start: Date, end: Date) {
-  const dates: string[] = []
-  const current = new Date(start)
-  current.setHours(0, 0, 0, 0)
-  const last = new Date(end)
-  last.setHours(0, 0, 0, 0)
-
-  while (current <= last) {
-    const year = current.getFullYear()
-    const month = String(current.getMonth() + 1).padStart(2, '0')
-    const day = String(current.getDate()).padStart(2, '0')
-    dates.push(`${year}-${month}-${day}`)
-    current.setDate(current.getDate() + 1)
-  }
-  return dates
-}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
@@ -104,6 +88,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const cancelledAt = new Date()
   try {
     await prisma.$transaction(async tx => {
+      await lockRoomInventory(tx, booking.roomSlot.roomId)
       const bookingUpdate = await tx.booking.updateMany({
         where: { id, status: { in: ['PENDING', 'CONFIRMED'] } },
         data: {
@@ -118,17 +103,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         await tx.payment.updateMany({ where: { id: payment.id, status: 'PENDING' }, data: { status: 'FAILED' } })
       }
 
-      await tx.roomSlot.updateMany({
-        where: booking.roomSlot.slotType === 'FULLDAY'
-          ? {
-              roomId: booking.roomSlot.roomId,
-              date: { in: dateRange(booking.checkIn, booking.checkOut) },
-              slotType: 'FULLDAY',
-              startTime: booking.roomSlot.startTime,
-            }
-          : { id: booking.roomSlotId },
-        data: { isBooked: false },
-      })
+      await releaseBookingSlots(tx, booking)
 
       await tx.auditLog.create({
         data: {

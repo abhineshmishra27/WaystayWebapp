@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { sendReviewNudge } from '@/lib/email'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
+import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-db'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -25,7 +26,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: 'Only confirmed bookings can be completed' }, { status: 400 })
     }
 
-    await prisma.booking.update({ where: { id }, data: { status: 'COMPLETED' } })
+    await prisma.$transaction(async tx => {
+      await lockRoomInventory(tx, booking.roomSlot.roomId)
+      const changed = await tx.booking.updateMany({ where: { id, status: 'CONFIRMED' }, data: { status: 'COMPLETED' } })
+      if (changed.count !== 1) throw new Error('Booking state changed')
+      await releaseBookingSlots(tx, booking)
+    })
 
     setTimeout(async () => {
       try {
