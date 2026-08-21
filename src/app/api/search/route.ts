@@ -97,41 +97,70 @@ export async function GET(req: NextRequest) {
 
     let filteredHotels = hotels
     if (startDate && endDate && slotType) {
-      const availableHotelIds: string[] = []
+      const roomIds = hotels.flatMap(hotel => hotel.rooms.map(room => room.id))
+      const requestedDates = slotType === 'FULLDAY' ? dateRangeStrings(startDate, endDate) : [startDate]
+      const [matchingSlots, activeBookings] = roomIds.length > 0
+        ? await Promise.all([
+            prisma.roomSlot.findMany({
+              where: {
+                roomId: { in: roomIds },
+                date: { gte: startDate, lte: slotType === 'FULLDAY' ? endDate : startDate },
+                slotType,
+              },
+              select: { roomId: true, date: true, slotType: true, startTime: true, endTime: true },
+            }),
+            prisma.booking.findMany({
+              where: {
+                status: { in: ['PENDING', 'CONFIRMED'] },
+                roomSlot: { roomId: { in: roomIds } },
+              },
+              select: {
+                totalHours: true,
+                roomSlot: { select: { roomId: true, date: true, slotType: true, startTime: true, endTime: true } },
+              },
+            }),
+          ])
+        : [[], []]
+
+      const slotsByRoomId = new Map<string, typeof matchingSlots>()
+      for (const candidate of matchingSlots) {
+        const roomSlots = slotsByRoomId.get(candidate.roomId) || []
+        roomSlots.push(candidate)
+        slotsByRoomId.set(candidate.roomId, roomSlots)
+      }
+
+      const bookingsByRoomId = new Map<string, typeof activeBookings>()
+      for (const booking of activeBookings) {
+        const roomBookings = bookingsByRoomId.get(booking.roomSlot.roomId) || []
+        roomBookings.push(booking)
+        bookingsByRoomId.set(booking.roomSlot.roomId, roomBookings)
+      }
+
+      const availableHotelIds = new Set<string>()
       for (const hotel of hotels) {
-        for (const room of hotel.rooms) {
-          const matchingSlots = await prisma.roomSlot.findMany({
-            where: {
-              roomId: room.id,
-              date: { gte: startDate, lte: slotType === 'FULLDAY' ? endDate : startDate },
-              slotType,
-            },
-            select: { date: true, slotType: true, startTime: true, endTime: true },
-          })
-          const activeBookings = await prisma.booking.findMany({
-            where: { status: { in: ['PENDING', 'CONFIRMED'] }, roomSlot: { roomId: room.id } },
-            select: { totalHours: true, roomSlot: { select: { date: true, slotType: true, startTime: true, endTime: true } } },
-          })
-          const requestedDates = slotType === 'FULLDAY' ? dateRangeStrings(startDate, endDate) : [startDate]
-          const startCandidates = matchingSlots.filter(candidate => candidate.date === startDate)
-          const hasAvailableCandidate = startCandidates.some(candidate => {
-            const hasEveryDate = requestedDates.every(date => matchingSlots.some(slot =>
+        const hotelHasAvailability = hotel.rooms.some(room => {
+          const roomSlots = slotsByRoomId.get(room.id) || []
+          const roomBookings = bookingsByRoomId.get(room.id) || []
+          const startCandidates = roomSlots.filter(candidate => candidate.date === startDate)
+
+          return startCandidates.some(candidate => {
+            const hasEveryDate = requestedDates.every(date => roomSlots.some(slot =>
               slot.date === date && slot.startTime === candidate.startTime && slot.endTime === candidate.endTime
             ))
-            return hasEveryDate && !activeBookings.some(booking => bookingConflictsWithRequest(booking, {
+            return hasEveryDate && !roomBookings.some(booking => bookingConflictsWithRequest(booking, {
               dates: requestedDates,
               slotType: candidate.slotType,
               startTime: candidate.startTime,
               endTime: candidate.endTime,
             }))
           })
-          if (hasAvailableCandidate) {
-            availableHotelIds.push(hotel.id)
-            break
-          }
+        })
+
+        if (hotelHasAvailability) {
+          availableHotelIds.add(hotel.id)
         }
       }
-      filteredHotels = hotels.filter(hotel => availableHotelIds.includes(hotel.id))
+      filteredHotels = hotels.filter(hotel => availableHotelIds.has(hotel.id))
     }
 
     if (minRating !== null) {
