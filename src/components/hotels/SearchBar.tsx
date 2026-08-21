@@ -155,14 +155,14 @@ export default function SearchBar({
             onClick={() => updateRentalMode('hourly')}
             className={`rounded-lg px-4 py-2.5 text-sm font-bold transition-colors ${rentalMode === 'hourly' ? 'bg-[var(--waystay-blue)] text-white shadow-sm' : 'text-[var(--waystay-blue)] hover:bg-white'}`}
           >
-            Hourly Stays
+            Click for Hourly Stays
           </button>
           <button
             type="button"
             onClick={() => updateRentalMode('day')}
             className={`rounded-lg px-4 py-2.5 text-sm font-bold transition-colors ${rentalMode === 'day' ? 'bg-[var(--waystay-orange)] text-white shadow-sm' : 'text-[var(--waystay-blue)] hover:bg-white'}`}
           >
-            By Night
+            Click for Night Halt
           </button>
         </div>
         {rentalMode === 'hourly' && (

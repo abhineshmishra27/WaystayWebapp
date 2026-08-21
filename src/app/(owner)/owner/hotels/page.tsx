@@ -16,26 +16,38 @@ function reasonFromMetadata(metadata: unknown) {
 export default async function OwnerHotelsPage() {
   const session = await auth()
   if (!session || !sessionHasPermission(session, PERMISSIONS.OWNER_ACCESS)) redirect('/login?error=unauthorized')
-  const hotels = await prisma.hotel.findMany({
-    where: { ownerId: session.user.id },
-    include: {
-      images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-      _count: { select: { rooms: true, reviews: true } },
-      auditLogs: {
-        where: { action: { in: ['HOTEL_APPROVED', 'HOTEL_REJECTED'] } },
-        select: { action: true, metadata: true, createdAt: true },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
+  const [hotels, listingRequests] = await Promise.all([
+    prisma.hotel.findMany({
+      where: { ownerId: session.user.id },
+      include: {
+        images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+        _count: { select: { rooms: true, reviews: true } },
+        auditLogs: {
+          where: { action: { in: ['HOTEL_APPROVED', 'HOTEL_REJECTED'] } },
+          select: { action: true, metadata: true, createdAt: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
-    },
-    orderBy: { createdAt: 'desc' },
-  })
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.hotelListingRequest.findMany({
+      where: { ownerId: session.user.id },
+      select: { id: true, hotelName: true, city: true, state: true, status: true, reviewReason: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ])
 
   return (
     <div>
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">My properties</h1>
-        <p className="mt-1 text-sm text-gray-500">View assigned properties and control whether approved listings are available on Waystay.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">My properties</h1>
+          <p className="mt-1 text-sm text-gray-500">View assigned properties and control whether approved listings are available on Waystay.</p>
+        </div>
+        <Link href="/owner/hotels/new" className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-700">
+          <span aria-hidden="true">+</span> List another hotel
+        </Link>
       </div>
       <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-900">
         Hotel details, rooms, prices, photos and other website content are managed by Waystay administrators. Contact the admin when information needs to be added or changed.
@@ -68,6 +80,25 @@ export default async function OwnerHotelsPage() {
         })}
         {hotels.length === 0 && <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center xl:col-span-2"><p className="text-sm text-gray-500">No hotels have been assigned to your account yet. Waystay administration will add the property after verification.</p></div>}
       </div>
+
+      {listingRequests.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold text-gray-900">Additional hotel requests</h2>
+          <p className="mt-1 text-sm text-gray-500">Track properties you have submitted for administrator review.</p>
+          <div className="mt-4 space-y-3">
+            {listingRequests.map(request => (
+              <article key={request.id} className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-gray-100 bg-white p-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900">{request.hotelName}</h3>
+                  <p className="mt-1 text-xs text-gray-500">{request.city}, {request.state} · Submitted {request.createdAt.toLocaleDateString('en-IN')}</p>
+                  {request.reviewReason && <p className="mt-2 text-sm text-gray-600">Admin note: {request.reviewReason}</p>}
+                </div>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${request.status === 'REVIEWED' ? 'bg-green-50 text-green-700' : request.status === 'REJECTED' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{request.status === 'REVIEWED' ? 'REVIEWED BY ADMIN' : request.status}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

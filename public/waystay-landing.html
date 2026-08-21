@@ -91,10 +91,17 @@
   }
 
   .stay-mode-btn[data-active="true"]{
-    background:#fff; color:var(--trust-blue); box-shadow:0 2px 8px rgba(10,37,64,0.14);
+    background:var(--alert-orange); color:#fff;
+    box-shadow:0 4px 12px rgba(255,107,0,0.28);
   }
   .stay-mode-btn[data-active="false"]{
-    background:transparent; color:#CBD5E1;
+    background:#fff; color:var(--trust-blue);
+  }
+  .stay-mode-btn[data-active="false"]:hover{
+    background:#F8FAFC; color:var(--alert-orange-dark);
+  }
+  .stay-mode-btn:focus-visible{
+    outline:3px solid rgba(255,180,122,0.75); outline-offset:2px;
   }
 
   .search-field-label{
@@ -153,12 +160,12 @@
 <!-- STICKY / BOTTOM-DOCKED STAY SEARCH -->
 <div class="fixed bottom-0 left-0 right-0 md:sticky md:top-0 z-40 bg-[var(--trust-blue)] shadow-[0_-2px_12px_rgba(0,0,0,0.18)] md:shadow-md">
   <div class="max-w-6xl mx-auto px-3 py-3">
-    <div id="stayModeToggle" data-mode="hourly" class="mb-2 inline-flex w-full rounded-xl bg-[#061C31] p-1 sm:w-auto" role="tablist" aria-label="Choose stay type">
-      <button id="hourlyModeButton" type="button" data-stay-mode="hourly" data-active="true" role="tab" aria-selected="true" class="stay-mode-btn min-w-0 flex-1 rounded-lg px-3 py-2 text-sm font-bold transition sm:flex-none sm:px-4">
-        Hourly Stays <span class="hidden lg:inline font-normal opacity-70">· 3, 6 or 12 hours</span>
+    <div id="stayModeToggle" data-mode="hourly" class="mb-2 inline-flex w-full gap-1 rounded-xl bg-white/10 p-1 shadow-sm ring-1 ring-white/10 sm:w-auto" role="tablist" aria-label="Choose stay type">
+      <button id="hourlyModeButton" type="button" data-stay-mode="hourly" data-active="true" role="tab" aria-selected="true" class="stay-mode-btn min-h-11 min-w-0 flex-1 rounded-lg px-3 py-2 text-[13px] font-extrabold leading-tight transition sm:flex-none sm:px-5 sm:text-sm">
+        Transit Rest . Hourly Stay
       </button>
-      <button id="nightModeButton" type="button" data-stay-mode="night" data-active="false" role="tab" aria-selected="false" class="stay-mode-btn min-w-0 flex-1 rounded-lg px-3 py-2 text-sm font-bold transition sm:flex-none sm:px-4">
-        By Night <span class="hidden lg:inline font-normal opacity-70">· Standard overnight stay</span>
+      <button id="nightModeButton" type="button" data-stay-mode="night" data-active="false" role="tab" aria-selected="false" class="stay-mode-btn min-h-11 min-w-0 flex-1 rounded-lg px-3 py-2 text-[13px] font-extrabold leading-tight transition sm:flex-none sm:px-5 sm:text-sm">
+        Night Sleep. Overnight
       </button>
     </div>
 
@@ -419,8 +426,7 @@
       const session = await response.json();
       if (!session || !session.user || session.user.isActive === false) {
         actions.innerHTML = `
-          <a href="/login?returnTo=%2F" target="_top" class="text-sm font-semibold text-slate-600 hover:text-[var(--trust-blue)]">Sign in</a>
-          <a href="/register?returnTo=%2F" target="_top" class="bg-[var(--alert-orange)] text-white text-sm font-bold px-3.5 py-2 rounded-lg hover:bg-[var(--alert-orange-dark)] transition">Signup</a>
+          <a href="/login?returnTo=%2F" target="_top" class="rounded-lg bg-[var(--alert-orange)] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--alert-orange-dark)]">Sign in / Sign up</a>
         `;
         actions.setAttribute('aria-busy', 'false');
         return;
@@ -432,8 +438,8 @@
       const initial = (fullName[0] || 'A').toUpperCase();
       const hasOwnerAccess = session.user.role === 'OWNER' || session.user.role === 'ADMIN';
       const hasAdminAccess = session.user.role === 'ADMIN';
-      const partnerHref = hasOwnerAccess ? '/owner/hotels/new' : '/partner';
-      const ownerMenuLink = hasOwnerAccess ? '<a href="/owner/hotels/new" target="_top" class="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[#FFF3EA] hover:text-[var(--trust-blue)]">Owner portal</a>' : '';
+      const partnerHref = hasOwnerAccess ? '/owner/hotels' : '/partner';
+      const ownerMenuLink = hasOwnerAccess ? '<a href="/owner/hotels" target="_top" class="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[#FFF3EA] hover:text-[var(--trust-blue)]">Owner portal</a>' : '';
       const adminMenuLink = hasAdminAccess ? '<a href="/admin" target="_top" class="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[#FFF3EA] hover:text-[var(--trust-blue)]">Admin portal</a>' : '';
       const partnerLink = document.getElementById('landingPartnerLink');
       if (partnerLink) partnerLink.href = partnerHref;
@@ -488,8 +494,7 @@
       document.getElementById('landingSignOut')?.addEventListener('click', signOutFromLanding);
     } catch {
       actions.innerHTML = `
-        <a href="/login?returnTo=%2F" target="_top" class="text-sm font-semibold text-slate-600 hover:text-[var(--trust-blue)]">Sign in</a>
-        <a href="/register?returnTo=%2F" target="_top" class="bg-[var(--alert-orange)] text-white text-sm font-bold px-3.5 py-2 rounded-lg hover:bg-[var(--alert-orange-dark)] transition">Signup</a>
+        <a href="/login?returnTo=%2F" target="_top" class="rounded-lg bg-[var(--alert-orange)] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--alert-orange-dark)]">Sign in / Sign up</a>
       `;
       actions.setAttribute('aria-busy', 'false');
     }

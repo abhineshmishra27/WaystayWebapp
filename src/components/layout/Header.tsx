@@ -64,12 +64,9 @@ export default function Header() {
 
         <nav className="flex items-center gap-2 sm:gap-3">
           {!session ? (
-            <>
-              <Link href={`/login?returnTo=${returnTo}`} className="text-sm font-semibold text-slate-600 hover:text-[var(--waystay-blue)]">Sign in</Link>
-              <Link href={`/register?returnTo=${returnTo}`} className="bg-[var(--waystay-orange)] text-white text-sm font-bold px-3.5 py-2 rounded-lg hover:bg-[var(--waystay-orange-dark)] transition">
-                Signup
-              </Link>
-            </>
+            <Link href={`/login?returnTo=${returnTo}`} className="rounded-lg bg-[var(--waystay-orange)] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--waystay-orange-dark)]">
+              Sign in / Sign up
+            </Link>
           ) : (
             <div className="relative" ref={menuRef}>
               <button
@@ -113,7 +110,7 @@ export default function Header() {
                     My bookings
                   </Link>
                   {hasOwnerAccess && (
-                    <Link href="/owner/hotels/new" onClick={() => setMenuOpen(false)} className="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[var(--waystay-orange-soft)] hover:text-[var(--waystay-blue)]">
+                    <Link href="/owner/hotels" onClick={() => setMenuOpen(false)} className="block px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-[var(--waystay-orange-soft)] hover:text-[var(--waystay-blue)]">
                       Owner portal
                     </Link>
                   )}

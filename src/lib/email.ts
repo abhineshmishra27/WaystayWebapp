@@ -194,3 +194,71 @@ export async function sendPartnerApplicationDecisionEmail(
     </div>`,
   })
 }
+
+export interface HotelListingRequestEmailData {
+  id: string
+  hotelName: string
+  gstNumber: string
+  licenseNumber?: string | null
+  address: string
+  city: string
+  state: string
+  pincode: string
+  contactPhone: string
+  roomCount?: number | null
+  message?: string | null
+  owner: {
+    name: string
+    email: string
+  }
+}
+
+export async function sendHotelListingRequestAdminEmail(request: HotelListingRequestEmailData) {
+  const adminEmail = process.env.PARTNER_ADMIN_EMAIL || 'waystayrooms@gmail.com'
+  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3017'
+  await sendEmail({
+    from: FROM,
+    to: adminEmail,
+    replyTo: request.owner.email,
+    subject: `Additional hotel listing request — ${request.hotelName}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;padding:24px;color:#0f172a">
+      <h1 style="font-size:24px;color:#0a2540">Additional hotel listing request</h1>
+      <p>An approved Waystay owner has requested another property listing.</p>
+      <table style="width:100%;border-collapse:collapse;margin:20px 0">
+        <tr><td style="padding:8px;color:#64748b">Owner</td><td style="padding:8px;font-weight:600">${escapeHtml(request.owner.name)}</td></tr>
+        <tr style="background:#f8fafc"><td style="padding:8px;color:#64748b">Owner email</td><td style="padding:8px">${escapeHtml(request.owner.email)}</td></tr>
+        <tr><td style="padding:8px;color:#64748b">Hotel</td><td style="padding:8px;font-weight:600">${escapeHtml(request.hotelName)}</td></tr>
+        <tr style="background:#f8fafc"><td style="padding:8px;color:#64748b">GST number</td><td style="padding:8px">${escapeHtml(request.gstNumber)}</td></tr>
+        ${request.licenseNumber ? `<tr><td style="padding:8px;color:#64748b">Licence number</td><td style="padding:8px">${escapeHtml(request.licenseNumber)}</td></tr>` : ''}
+        <tr style="background:#f8fafc"><td style="padding:8px;color:#64748b">Address</td><td style="padding:8px">${escapeHtml(request.address)}, ${escapeHtml(request.city)}, ${escapeHtml(request.state)} ${escapeHtml(request.pincode)}</td></tr>
+        <tr><td style="padding:8px;color:#64748b">Contact phone</td><td style="padding:8px">${escapeHtml(request.contactPhone)}</td></tr>
+        ${request.roomCount ? `<tr style="background:#f8fafc"><td style="padding:8px;color:#64748b">Approximate rooms</td><td style="padding:8px">${escapeHtml(request.roomCount)}</td></tr>` : ''}
+      </table>
+      ${request.message ? `<p><strong>Owner note:</strong><br>${escapeHtml(request.message)}</p>` : ''}
+      <a href="${baseUrl}/admin/partners" style="display:inline-block;background:#ff6b00;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Review request</a>
+    </div>`,
+  })
+}
+
+export async function sendHotelListingRequestDecisionEmail(
+  request: Pick<HotelListingRequestEmailData, 'hotelName' | 'owner'>,
+  reviewed: boolean,
+  reason: string,
+) {
+  const contactEmail = process.env.PARTNER_ADMIN_EMAIL || 'waystayrooms@gmail.com'
+  await sendEmail({
+    from: FROM,
+    to: request.owner.email,
+    replyTo: contactEmail,
+    subject: `Update on ${request.hotelName}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;color:#0f172a">
+      <h1 style="color:#0a2540">Hotel listing request update</h1>
+      <p>Hi ${escapeHtml(request.owner.name)},</p>
+      <p>${reviewed
+        ? `Waystay has reviewed your request to list <strong>${escapeHtml(request.hotelName)}</strong>. The administrator will contact you for any remaining hotel content and verification.`
+        : `Waystay cannot proceed with the request to list <strong>${escapeHtml(request.hotelName)}</strong> at this time.`}</p>
+      <p><strong>Admin note:</strong> ${escapeHtml(reason)}</p>
+      <p>For assistance, reply to this email or contact <a href="mailto:${contactEmail}">${contactEmail}</a>.</p>
+    </div>`,
+  })
+}
