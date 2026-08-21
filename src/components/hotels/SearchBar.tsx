@@ -21,6 +21,15 @@ function positiveInt(value: string | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
+function addDays(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00`)
+  date.setDate(date.getDate() + days)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export default function SearchBar({
   className = '',
   initialCity = '',
@@ -95,24 +104,21 @@ export default function SearchBar({
 
   const updateRentalMode = (mode: RentalMode) => {
     if (mode === 'day') {
-      const nextEndDate = endDate < startDate ? startDate : endDate
+      const nextEndDate = endDate <= startDate ? addDays(startDate, 1) : endDate
       setSlot('FULLDAY')
       setEndDate(nextEndDate)
-      handleSearch({ slot: 'FULLDAY', endDate: nextEndDate })
       return
     }
 
     const nextSlot = slot === 'FULLDAY' ? 'H3' : slot
     setSlot(nextSlot)
     setEndDate(startDate)
-    handleSearch({ slot: nextSlot, endDate: startDate })
   }
 
   const updateHourSlot = (nextSlot: SlotValue) => {
     if (nextSlot === 'FULLDAY') return
     setSlot(nextSlot)
     setEndDate(startDate)
-    handleSearch({ slot: nextSlot, endDate: startDate })
   }
 
   return (
@@ -126,28 +132,45 @@ export default function SearchBar({
         className="w-full px-4 py-3 text-gray-800 text-sm focus:outline-none rounded-xl"
       />
       <div className="mt-2 flex flex-col gap-2 md:flex-row md:flex-wrap">
-        <div className={`grid gap-2 ${rentalMode === 'day' ? 'sm:grid-cols-2 md:min-w-[24rem]' : 'md:min-w-44'}`}>
-          <input
-            type="date"
-            aria-label="Start date"
-            value={startDate}
-            min={today}
-            onChange={e => {
-              setStartDate(e.target.value)
-              if (endDate < e.target.value) setEndDate(e.target.value)
-            }}
-            className="px-4 py-3 text-[var(--waystay-blue)] text-sm font-semibold focus:outline-none rounded-xl border border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)]"
-          />
-          {rentalMode === 'day' && (
+        <div className="grid grid-cols-2 gap-2 md:w-[23rem] md:shrink-0">
+          <label className="rounded-xl border border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-3 py-2">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-[var(--waystay-orange-dark)]">Date</span>
             <input
               type="date"
-              aria-label="End date"
-              value={endDate}
-              min={startDate}
-              onChange={e => setEndDate(e.target.value)}
-              className="px-4 py-3 text-[var(--waystay-blue)] text-sm font-semibold focus:outline-none rounded-xl border border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)]"
+              aria-label="Start date"
+              value={startDate}
+              min={today}
+              onChange={e => {
+                const nextStartDate = e.target.value
+                setStartDate(nextStartDate)
+                if (rentalMode === 'day' && endDate <= nextStartDate) setEndDate(addDays(nextStartDate, 1))
+              }}
+              className="mt-0.5 w-full bg-transparent text-sm font-semibold text-[var(--waystay-blue)] outline-none"
             />
-          )}
+          </label>
+          <label className="rounded-xl border border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-3 py-2">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-[var(--waystay-orange-dark)]">{rentalMode === 'hourly' ? 'Hourly slot' : 'To date'}</span>
+            {rentalMode === 'hourly' ? (
+              <select
+                value={slot}
+                onChange={e => updateHourSlot(normalizeSlot(e.target.value))}
+                className="mt-0.5 w-full bg-transparent text-sm font-semibold text-[var(--waystay-blue)] outline-none"
+              >
+                {HOUR_SLOT_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="date"
+                aria-label="To date"
+                value={endDate}
+                min={addDays(startDate, 1)}
+                onChange={e => setEndDate(e.target.value)}
+                className="mt-0.5 w-full bg-transparent text-sm font-semibold text-[var(--waystay-blue)] outline-none"
+              />
+            )}
+          </label>
         </div>
         <div className="grid grid-cols-2 rounded-xl border border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] p-1">
           <button
@@ -165,19 +188,6 @@ export default function SearchBar({
             Click for Night Halt
           </button>
         </div>
-        {rentalMode === 'hourly' && (
-          <select
-            value={slot}
-            onChange={e => updateHourSlot(normalizeSlot(e.target.value))}
-            className="px-4 py-3 text-[var(--waystay-blue)] text-sm font-semibold focus:outline-none rounded-xl border border-[var(--waystay-orange)] bg-[var(--waystay-orange-soft)] shadow-sm focus:ring-2 focus:ring-[var(--waystay-orange-tint)]"
-          >
-            {HOUR_SLOT_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        )}
         <div className="flex items-center justify-between gap-3 px-3 py-2 text-gray-800 text-sm rounded-xl border border-gray-100 bg-white min-w-44">
           <span className="text-gray-500">Guests</span>
           <div className="flex items-center gap-2">
