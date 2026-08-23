@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import toast, { Toaster } from 'react-hot-toast'
 import { canCancelBooking } from '@/lib/booking-cancellation'
+import { bookingHasEnded } from '@/lib/booking-datetime'
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-amber-50 text-amber-700',
@@ -15,6 +16,7 @@ interface BookingSummary {
   id: string
   status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'
   totalAmount: number
+  totalHours: number
   checkIn: string
   checkOut: string
   createdAt: string
@@ -33,12 +35,15 @@ export default function BookingsPage() {
   const [bookings, setBookings] = useState<BookingSummary[]>([])
   const [tab, setTab] = useState<'upcoming' | 'past' | 'all'>('upcoming')
   const [loading, setLoading] = useState(true)
+  const [currentTime, setCurrentTime] = useState(() => new Date())
 
   useEffect(() => {
     fetch('/api/bookings').then(r => r.json()).then(data => {
       setBookings(Array.isArray(data) ? data : [])
       setLoading(false)
     })
+    const timer = window.setInterval(() => setCurrentTime(new Date()), 30_000)
+    return () => window.clearInterval(timer)
   }, [])
 
   const handleCancel = async (bookingId: string) => {
@@ -54,7 +59,7 @@ export default function BookingsPage() {
   }
 
   const filtered = bookings.filter((b) => {
-    const hasEnded = new Date(b.checkOut).getTime() <= Date.now()
+    const hasEnded = bookingHasEnded(b, currentTime)
     if (tab === 'upcoming') return ['PENDING', 'CONFIRMED'].includes(b.status) && !hasEnded
     if (tab === 'past') return ['COMPLETED', 'CANCELLED'].includes(b.status) || hasEnded
     return true
@@ -120,7 +125,7 @@ export default function BookingsPage() {
                         <button onClick={() => handleCancel(b.id)}
                           className="text-xs text-red-500 border border-red-100 px-3 py-1.5 rounded-lg hover:bg-red-50">Cancel</button>
                       )}
-                      {!cancellationAllowed && ['PENDING', 'CONFIRMED'].includes(b.status) && new Date(b.checkIn).getTime() <= Date.now() && (
+                      {!cancellationAllowed && ['PENDING', 'CONFIRMED'].includes(b.status) && new Date(b.checkIn).getTime() <= currentTime.getTime() && (
                         <span className="text-xs font-medium text-gray-400">Cancellation closed</span>
                       )}
                     </div>

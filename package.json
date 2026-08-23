@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:booking-inventory": "node --no-warnings --test tests/booking-inventory.test.mts",
+    "test:booking-datetime": "node --no-warnings --test tests/booking-datetime.test.mts",
     "test:booking-time": "node --no-warnings --test tests/booking-time.test.mts",
     "test:room-slot-settings": "node --no-warnings --test tests/room-slot-settings.test.mts",
     "test:booking-cancellation": "node --no-warnings --test tests/booking-cancellation.test.mts",

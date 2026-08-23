@@ -12,6 +12,7 @@ import { bookingConflictsWithRequest, dateRangeStrings } from '@/lib/booking-inv
 import { lockRoomInventory } from '@/lib/booking-inventory-db'
 import { slotIsPastForBooking, todayInIndia } from '@/lib/booking-time'
 import { roomAllowsSlotType } from '@/lib/room-slot-settings'
+import { createBookingDateTimes } from '@/lib/booking-datetime'
 
 const createBookingSchema = z.object({
   slotId: z.string(),
@@ -180,13 +181,13 @@ export async function POST(req: NextRequest) {
         data: { isBooked: true },
       })
 
-      // Calculate check-in/out datetimes
-      const [siH, siM] = slot.startTime.split(':').map(Number)
-      const [soH, soM] = slot.endTime.split(':').map(Number)
-      const checkIn = new Date(`${rangeStart}T00:00:00`)
-      checkIn.setHours(siH, siM, 0, 0)
-      const checkOut = new Date(`${rangeEnd}T00:00:00`)
-      checkOut.setHours(soH, soM, 0, 0)
+      const { checkIn, checkOut } = createBookingDateTimes({
+        startDate: rangeStart,
+        endDate: rangeEnd,
+        slotType: slot.slotType,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+      })
 
       const hours: Record<string, number> = { H3: 3, H6: 6, H12: 12, FULLDAY: 24 }
       const totalHours = (hours[slot.slotType] || 3) * dates.length
