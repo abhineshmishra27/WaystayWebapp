@@ -46,6 +46,12 @@ test('a later non-overlapping slot remains available', () => {
     startTime: '09:00',
     endTime: '12:00',
   }), false)
+  assert.equal(slotIsUnavailable({
+    date: '2026-08-20',
+    slotType: 'H3',
+    startTime: '15:00',
+    endTime: '18:00',
+  }, [existing]), false)
 })
 
 test('a multi-day full-day booking blocks every slot on every covered date', () => {
@@ -57,6 +63,27 @@ test('a multi-day full-day booking blocks every slot on every covered date', () 
     startTime: '15:00',
     endTime: '18:00',
   }), true)
+  assert.equal(slotIsUnavailable({
+    date: '2026-08-20',
+    slotType: 'H3',
+    startTime: '06:00',
+    endTime: '09:00',
+  }, [existing]), true)
+  assert.equal(slotIsUnavailable({
+    date: '2026-08-20',
+    slotType: 'H12',
+    startTime: '06:00',
+    endTime: '18:00',
+  }, [existing]), true)
+})
+
+test('an unbooked full-day slot remains available through inventory rules', () => {
+  assert.equal(slotIsUnavailable({
+    date: '2026-08-20',
+    slotType: 'FULLDAY',
+    startTime: '12:00',
+    endTime: '11:00',
+  }, []), false)
 })
 
 test('a full-day request is blocked by an hourly booking on any requested date', () => {

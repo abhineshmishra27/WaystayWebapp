@@ -1,6 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { bookingConflictsWithRequest, dateRangeStrings } from '@/lib/booking-inventory'
+import { slotIsPastForBooking } from '@/lib/booking-time'
+import { roomAllowsSlotType, type CustomerSlotType, type RoomSlotSettings } from '@/lib/room-slot-settings'
+
+type PricedRoom = RoomSlotSettings & {
+  pricePerHour: number
+  price_3h: number
+  price_6h: number
+  price_12h: number
+  priceFullDay: number
+}
+
+function roomPriceForSlot(room: PricedRoom, slotType: CustomerSlotType) {
+  if (slotType === 'H6') return room.price_6h
+  if (slotType === 'H12') return room.price_12h
+  if (slotType === 'FULLDAY') return room.priceFullDay
+  return room.price_3h
+}
+
+function lowestRoomPrice(rooms: PricedRoom[], slotType: CustomerSlotType) {
+  const prices = rooms
+    .filter(room => roomAllowsSlotType(room, slotType))
+    .map(room => roomPriceForSlot(room, slotType))
+  return prices.length > 0 ? Math.min(...prices) : null
+}
 
 function distanceKm(fromLat: number, fromLng: number, toLat: number, toLng: number) {
   const earthRadiusKm = 6371
@@ -32,7 +56,7 @@ export async function GET(req: NextRequest) {
     const date = searchParams.get('date')
     const startDate = searchParams.get('startDate') ?? date
     const endDate = searchParams.get('endDate') ?? startDate
-    const slotType = (searchParams.get('slot') as 'H3' | 'H6' | 'H12' | 'FULLDAY' | null)
+    const slotType = searchParams.get('slot') as CustomerSlotType | null
     const roomCount = Math.max(1, Math.min(10, parseInt(searchParams.get('roomCount') || '1', 10) || 1))
 
     if (hasLat !== hasLng) {
@@ -67,9 +91,19 @@ export async function GET(req: NextRequest) {
         images: { orderBy: { sortOrder: 'asc' }, take: 1 },
         reviews: { where: { status: 'PUBLISHED' }, select: { rating: true } },
         rooms: {
-          where: { isActive: true },
-          select: { id: true, pricePerHour: true, price_3h: true, price_6h: true, price_12h: true, priceFullDay: true },
-          take: 1,
+          where: { isActive: true, available: true },
+          select: {
+            id: true,
+            pricePerHour: true,
+            price_3h: true,
+            price_6h: true,
+            price_12h: true,
+            priceFullDay: true,
+            threeHourEnabled: true,
+            sixHourEnabled: true,
+            twelveHourEnabled: true,
+            nightStayEnabled: true,
+          },
           orderBy: { price_3h: 'asc' },
         },
       },
@@ -97,6 +131,7 @@ export async function GET(req: NextRequest) {
 
     let filteredHotels = hotels
     if (startDate && endDate && slotType) {
+      const now = new Date()
       const roomIds = hotels.flatMap(hotel => hotel.rooms.map(room => room.id))
       const requestedDates = slotType === 'FULLDAY' ? dateRangeStrings(startDate, endDate) : [startDate]
       const [matchingSlots, activeBookings] = roomIds.length > 0
@@ -107,7 +142,7 @@ export async function GET(req: NextRequest) {
                 date: { gte: startDate, lte: slotType === 'FULLDAY' ? endDate : startDate },
                 slotType,
               },
-              select: { roomId: true, date: true, slotType: true, startTime: true, endTime: true },
+              select: { roomId: true, date: true, slotType: true, startTime: true, endTime: true, isBooked: true },
             }),
             prisma.booking.findMany({
               where: {
@@ -139,13 +174,15 @@ export async function GET(req: NextRequest) {
       const availableHotelIds = new Set<string>()
       for (const hotel of hotels) {
         const hotelHasAvailability = hotel.rooms.some(room => {
+          if (!roomAllowsSlotType(room, slotType)) return false
           const roomSlots = slotsByRoomId.get(room.id) || []
           const roomBookings = bookingsByRoomId.get(room.id) || []
           const startCandidates = roomSlots.filter(candidate => candidate.date === startDate)
 
           return startCandidates.some(candidate => {
+            if (candidate.isBooked || slotIsPastForBooking(candidate.slotType, candidate.date, candidate.startTime, now)) return false
             const hasEveryDate = requestedDates.every(date => roomSlots.some(slot =>
-              slot.date === date && slot.startTime === candidate.startTime && slot.endTime === candidate.endTime
+              slot.date === date && slot.startTime === candidate.startTime && slot.endTime === candidate.endTime && !slot.isBooked
             ))
             return hasEveryDate && !roomBookings.some(booking => bookingConflictsWithRequest(booking, {
               dates: requestedDates,
@@ -173,13 +210,8 @@ export async function GET(req: NextRequest) {
     const paginatedHotels = filteredHotels.slice(skip, skip + limit)
 
     const result = paginatedHotels.map(hotel => {
-      const selectedSlotPrice = slotType === 'H6'
-        ? hotel.rooms[0]?.price_6h || null
-        : slotType === 'H12'
-          ? hotel.rooms[0]?.price_12h || null
-          : slotType === 'FULLDAY'
-            ? hotel.rooms[0]?.priceFullDay || null
-            : hotel.rooms[0]?.price_3h || null
+      const selectedSlotPrice = lowestRoomPrice(hotel.rooms, slotType ?? 'H3')
+      const hourlyPrices = hotel.rooms.map(room => room.pricePerHour)
 
       return {
       selectedSlotPrice: selectedSlotPrice ? selectedSlotPrice * roomCount : null,
@@ -193,11 +225,11 @@ export async function GET(req: NextRequest) {
       image: hotel.images[0]?.url || null,
       avgRating: ratingByHotelId.get(hotel.id) ?? 0,
       reviewCount: hotel.reviews.length || hotel.total_review,
-      pricePerHour: hotel.rooms[0]?.pricePerHour || null,
-      price3h: hotel.rooms[0]?.price_3h || null,
-      price6h: hotel.rooms[0]?.price_6h || null,
-      price12h: hotel.rooms[0]?.price_12h || null,
-      priceFullDay: hotel.rooms[0]?.priceFullDay || null,
+      pricePerHour: hourlyPrices.length > 0 ? Math.min(...hourlyPrices) : null,
+      price3h: lowestRoomPrice(hotel.rooms, 'H3'),
+      price6h: lowestRoomPrice(hotel.rooms, 'H6'),
+      price12h: lowestRoomPrice(hotel.rooms, 'H12'),
+      priceFullDay: lowestRoomPrice(hotel.rooms, 'FULLDAY'),
     }
     })
 

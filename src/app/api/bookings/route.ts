@@ -10,6 +10,8 @@ import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
 import { bookingConflictsWithRequest, dateRangeStrings } from '@/lib/booking-inventory'
 import { lockRoomInventory } from '@/lib/booking-inventory-db'
+import { slotIsPastForBooking, todayInIndia } from '@/lib/booking-time'
+import { roomAllowsSlotType } from '@/lib/room-slot-settings'
 
 const createBookingSchema = z.object({
   slotId: z.string(),
@@ -25,21 +27,6 @@ const createBookingSchema = z.object({
   paymentMethod: z.enum(['RAZORPAY', 'PAY_AT_HOTEL']).default('RAZORPAY'),
 })
 
-function todayInIndia() {
-  const parts = new Intl.DateTimeFormat('en', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date())
-
-  const year = parts.find(part => part.type === 'year')?.value
-  const month = parts.find(part => part.type === 'month')?.value
-  const day = parts.find(part => part.type === 'day')?.value
-
-  return `${year}-${month}-${day}`
-}
-
 function isRazorpayConfigured() {
   return Boolean(
     process.env.RAZORPAY_KEY_ID?.startsWith('rzp_') &&
@@ -53,6 +40,8 @@ function isBookingConflict(error: Error) {
     'This slot is no longer available',
     'Invalid booking date range',
     'Past dates cannot be booked',
+    'This slot has already started',
+    'This stay duration is disabled for this room',
     'Selected slot does not match the booking date',
     'Selected slot type does not match the booking request',
     'Multi-day bookings require a full-day slot',
@@ -146,6 +135,8 @@ export async function POST(req: NextRequest) {
       if (rangeStart < todayInIndia()) throw new Error('Past dates cannot be booked')
       if (slot.date !== rangeStart) throw new Error('Selected slot does not match the booking date')
       if (slotType && slot.slotType !== slotType) throw new Error('Selected slot type does not match the booking request')
+      if (!roomAllowsSlotType(slot.room, slot.slotType)) throw new Error('This stay duration is disabled for this room')
+      if (slotIsPastForBooking(slot.slotType, slot.date, slot.startTime)) throw new Error('This slot has already started')
       if (dates.length > 1 && (slotType !== 'FULLDAY' || slot.slotType !== 'FULLDAY')) {
         throw new Error('Multi-day bookings require a full-day slot')
       }

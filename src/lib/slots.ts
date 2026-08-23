@@ -7,6 +7,7 @@ type GenerateSlotOptions = {
   endHour?: number
   pricePerHour?: number
   priceFullDay?: number
+  enabledSlotTypes?: readonly SlotType[]
 }
 
 const durations = [
@@ -17,7 +18,8 @@ const durations = [
 ]
 
 export function generateSlotsForRoom(options: GenerateSlotOptions) {
-  const { roomId, date, startHour = 8, endHour = 20 } = options
+  const { roomId, date, startHour = 8, endHour = 20, enabledSlotTypes } = options
+  const enabled = enabledSlotTypes ? new Set(enabledSlotTypes) : null
   const slots = [] as Array<{
     roomId: string
     date: string
@@ -27,6 +29,7 @@ export function generateSlotsForRoom(options: GenerateSlotOptions) {
   }>
 
   for (const duration of durations) {
+    if (enabled && !enabled.has(duration.slotType)) continue
     const end = startHour + duration.hours
     if (end <= endHour) {
       slots.push({
@@ -39,13 +42,15 @@ export function generateSlotsForRoom(options: GenerateSlotOptions) {
     }
   }
 
-  slots.push({
-    roomId,
-    date,
-    slotType: 'FULLDAY',
-    startTime: `${String(startHour).padStart(2, '0')}:00`,
-    endTime: `${String(endHour).padStart(2, '0')}:00`,
-  })
+  if (!enabled || enabled.has('FULLDAY')) {
+    slots.push({
+      roomId,
+      date,
+      slotType: 'FULLDAY',
+      startTime: `${String(startHour).padStart(2, '0')}:00`,
+      endTime: `${String(endHour).padStart(2, '0')}:00`,
+    })
+  }
 
   return slots
 }

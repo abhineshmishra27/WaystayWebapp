@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import OwnerHotelStatusButton from '@/components/owner/OwnerHotelStatusButton'
+import RoomStayOptionControls from '@/components/owner/RoomStayOptionControls'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { PERMISSIONS, sessionHasPermission } from '@/lib/rbac'
@@ -21,6 +22,24 @@ export default async function OwnerHotelsPage() {
       where: { ownerId: session.user.id },
       include: {
         images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+        rooms: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            isActive: true,
+            available: true,
+            price_3h: true,
+            price_6h: true,
+            price_12h: true,
+            priceFullDay: true,
+            threeHourEnabled: true,
+            sixHourEnabled: true,
+            twelveHourEnabled: true,
+            nightStayEnabled: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
         _count: { select: { rooms: true, reviews: true } },
         auditLogs: {
           where: { action: { in: ['HOTEL_APPROVED', 'HOTEL_REJECTED'] } },
@@ -50,7 +69,7 @@ export default async function OwnerHotelsPage() {
         </Link>
       </div>
       <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-900">
-        Hotel details, rooms, prices, photos and other website content are managed by Waystay administrators. Contact the admin when information needs to be added or changed.
+        Hotel details, room information, prices and photos are managed by Waystay administrators. You can independently control which stay durations customers can book for each room.
       </div>
       <div className="mt-6 grid gap-4 xl:grid-cols-2">
         {hotels.map(hotel => {
@@ -75,6 +94,31 @@ export default async function OwnerHotelsPage() {
                 </div>
               </div>
               {reason && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">Admin feedback: {reason}</p>}
+              {hotel.rooms.length > 0 && (
+                <div className="mt-5 border-t border-gray-100 pt-4">
+                  <div className="mb-3"><h3 className="text-sm font-semibold text-gray-900">Room stay options</h3><p className="mt-1 text-xs text-gray-500">Enable or disable each duration independently. Changes apply to search and booking immediately.</p></div>
+                  <div className="space-y-4">
+                    {hotel.rooms.map(room => (
+                      <section key={room.id} className="rounded-xl border border-gray-100 p-3">
+                        <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                          <div><h4 className="text-sm font-semibold text-gray-800">{room.name}</h4><p className="text-[11px] text-gray-500">{room.type} · ₹{room.price_3h} / ₹{room.price_6h} / ₹{room.price_12h} / ₹{room.priceFullDay}</p></div>
+                          <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${room.isActive && room.available ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{room.isActive && room.available ? 'ROOM ACTIVE' : 'ROOM INACTIVE'}</span>
+                        </div>
+                        <RoomStayOptionControls
+                          roomId={room.id}
+                          initialSettings={{
+                            threeHourEnabled: room.threeHourEnabled,
+                            sixHourEnabled: room.sixHourEnabled,
+                            twelveHourEnabled: room.twelveHourEnabled,
+                            nightStayEnabled: room.nightStayEnabled,
+                          }}
+                        />
+                      </section>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {hotel.rooms.length === 0 && <p className="mt-5 border-t border-gray-100 pt-4 text-xs text-gray-500">No rooms are configured for this hotel yet.</p>}
             </article>
           )
         })}

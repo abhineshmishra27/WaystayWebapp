@@ -5,6 +5,7 @@ import { generateSlotsForRoom } from '@/lib/slots'
 import { z } from 'zod'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
+import { enabledSlotTypesForRoom } from '@/lib/room-slot-settings'
 
 const slotGenerationSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -35,7 +36,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ roo
     }
 
     const { date, startHour, endHour } = parsed.data
-    const slotsData = generateSlotsForRoom({ roomId, date, startHour, endHour })
+    const slotsData = generateSlotsForRoom({
+      roomId,
+      date,
+      startHour,
+      endHour,
+      enabledSlotTypes: enabledSlotTypesForRoom(room),
+    })
 
     const createdSlots = await prisma.roomSlot.createMany({ data: slotsData, skipDuplicates: true })
     return NextResponse.json({ created: createdSlots.count })

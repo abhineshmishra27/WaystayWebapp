@@ -2,21 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
 import { slotIsUnavailable } from '@/lib/booking-inventory'
-
-function todayInIndia() {
-  const parts = new Intl.DateTimeFormat('en', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date())
-
-  const year = parts.find(part => part.type === 'year')?.value
-  const month = parts.find(part => part.type === 'month')?.value
-  const day = parts.find(part => part.type === 'day')?.value
-
-  return `${year}-${month}-${day}`
-}
+import { slotIsPastForBooking, todayInIndia } from '@/lib/booking-time'
+import { roomAllowsSlotType } from '@/lib/room-slot-settings'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
   try {
@@ -26,7 +13,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
     const startDate = searchParams.get('startDate') ?? date
     const endDate = searchParams.get('endDate') ?? startDate
 
-    const today = todayInIndia()
+    const now = new Date()
+    const today = todayInIndia(now)
     const effectiveStartDate = startDate && startDate > today ? startDate : today
     const effectiveEndDate = endDate && endDate > effectiveStartDate ? endDate : effectiveStartDate
 
@@ -37,7 +25,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
       where.date = { gte: today }
     }
 
-    const [slots, activeBookings] = await Promise.all([
+    const [room, slots, activeBookings] = await Promise.all([
+      prisma.room.findUnique({
+        where: { id: roomId },
+        select: { threeHourEnabled: true, sixHourEnabled: true, twelveHourEnabled: true, nightStayEnabled: true },
+      }),
       prisma.roomSlot.findMany({
         where,
         orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
@@ -53,10 +45,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
         },
       }),
     ])
+    if (!room) return NextResponse.json({ error: 'Room not found' }, { status: 404 })
 
-    const availability = slots.reduce<Record<string, Array<{ id: string; date: string; startTime: string; endTime: string; slotType: string; isBooked: boolean }>>>(
+    const availability = slots.reduce<Record<string, Array<{ id: string; date: string; startTime: string; endTime: string; slotType: string; isBooked: boolean; hasStarted: boolean; isEnabled: boolean }>>>(
       (acc, slot) => {
         const key = slot.date
+        const hasStarted = slotIsPastForBooking(slot.slotType, slot.date, slot.startTime, now)
+        const isEnabled = roomAllowsSlotType(room, slot.slotType)
         if (!acc[key]) acc[key] = []
         acc[key].push({
           id: slot.id,
@@ -64,7 +59,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
           startTime: slot.startTime,
           endTime: slot.endTime,
           slotType: slot.slotType,
-          isBooked: slotIsUnavailable(slot, activeBookings, slot.slotType === 'FULLDAY' ? effectiveEndDate : slot.date),
+          isBooked: slot.isBooked || slotIsUnavailable(slot, activeBookings, slot.slotType === 'FULLDAY' ? effectiveEndDate : slot.date),
+          hasStarted,
+          isEnabled,
         })
         return acc
       },

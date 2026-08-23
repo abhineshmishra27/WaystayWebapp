@@ -167,6 +167,10 @@ export default async function HotelDetailPage({
                   initialEndDate={initialEndDate}
                   initialGuestCount={initialGuestCount}
                   initialRoomCount={initialRoomCount}
+                  threeHourEnabled={room.threeHourEnabled}
+                  sixHourEnabled={room.sixHourEnabled}
+                  twelveHourEnabled={room.twelveHourEnabled}
+                  nightStayEnabled={room.nightStayEnabled}
                 />
               </div>
             ))}

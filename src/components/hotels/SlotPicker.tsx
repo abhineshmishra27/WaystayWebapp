@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { slotIsPastForBooking } from '@/lib/booking-time'
 
 const SLOT_LABELS: Record<string, string> = { H3: '3 Hours', H6: '6 Hours', H12: '12 Hours', FULLDAY: 'Full Day' }
 type SlotType = 'H3' | 'H6' | 'H12' | 'FULLDAY'
@@ -32,9 +33,12 @@ function positiveInt(value: string | undefined, fallback: number) {
 
 interface SlotOption {
   id: string
+  date: string
   startTime: string
   endTime: string
   isBooked: boolean
+  hasStarted?: boolean
+  isEnabled?: boolean
   slotType: string
 }
 
@@ -51,6 +55,10 @@ export default function SlotPicker({
   initialEndDate,
   initialGuestCount,
   initialRoomCount,
+  threeHourEnabled = true,
+  sixHourEnabled = true,
+  twelveHourEnabled = true,
+  nightStayEnabled = true,
 }: {
   roomId: string
   price3h: number
@@ -64,20 +72,37 @@ export default function SlotPicker({
   initialEndDate?: string
   initialGuestCount?: string
   initialRoomCount?: string
+  threeHourEnabled?: boolean
+  sixHourEnabled?: boolean
+  twelveHourEnabled?: boolean
+  nightStayEnabled?: boolean
 }) {
   const router = useRouter()
+  const enabledTabs: Record<SlotType, boolean> = {
+    H3: threeHourEnabled,
+    H6: sixHourEnabled,
+    H12: twelveHourEnabled,
+    FULLDAY: nightStayEnabled,
+  }
+  const firstEnabledTab = (Object.keys(enabledTabs) as SlotType[]).find(tab => enabledTabs[tab])
   const today = getTodayDateString()
   const initialSafeStartDate = clampToToday(initialStartDate, today)
   const initialSafeEndDate = clampToToday(initialEndDate || initialStartDate, today)
   const [startDate, setStartDate] = useState(initialSafeStartDate)
   const [endDate, setEndDate] = useState(initialSafeEndDate >= initialSafeStartDate ? initialSafeEndDate : initialSafeStartDate)
-  const [activeTab, setActiveTab] = useState<SlotType>(initialSlotType)
+  const [activeTab, setActiveTab] = useState<SlotType>(enabledTabs[initialSlotType] ? initialSlotType : firstEnabledTab ?? initialSlotType)
   const [availability, setAvailability] = useState<Record<string, SlotOption[]>>({})
   const [loading, setLoading] = useState(false)
+  const [currentTime, setCurrentTime] = useState(() => new Date())
   const guestsPerRoomLimit = Math.max(1, Math.min(maxGuestsPerRoom, DEFAULT_MAX_GUESTS_PER_ROOM))
   const [guestCount, setGuestCount] = useState(positiveInt(initialGuestCount, 1))
   const [roomCount, setRoomCount] = useState(Math.max(positiveInt(initialRoomCount, 1), Math.ceil(positiveInt(initialGuestCount, 1) / guestsPerRoomLimit)))
   const requiredRooms = Math.max(1, Math.ceil(guestCount / guestsPerRoomLimit))
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(new Date()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -205,11 +230,12 @@ export default function SlotPicker({
           <button
             key={t}
             type="button"
+            disabled={!enabledTabs[t]}
             onClick={() => {
               setActiveTab(t)
               if (t !== 'FULLDAY') setEndDate(startDate)
             }}
-            className={`flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-colors ${activeTab === t ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:text-gray-300 ${activeTab === t ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
           >
             {SLOT_LABELS[t]}
           </button>
@@ -224,20 +250,32 @@ export default function SlotPicker({
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
-          {filteredSlots.map(slot => (
-            <button
-              key={slot.id}
-              type="button"
-              disabled={slot.isBooked}
-              onClick={() => handleSlotSelect(slot)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${slot.isBooked ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'}`}
-            >
-              {slot.startTime} – {slot.endTime}
-              {!slot.isBooked && <span className="block text-xs text-indigo-500">₹{getPrice(activeTab)}</span>}
-            </button>
-          ))}
+          {filteredSlots.map(slot => {
+            const isPast = Boolean(slot.hasStarted) || slotIsPastForBooking(slot.slotType, slot.date, slot.startTime, currentTime)
+            const isEnabled = enabledTabs[activeTab] && slot.isEnabled !== false
+            const isUnavailable = !isEnabled || slot.isBooked || isPast
+
+            return (
+              <button
+                key={slot.id}
+                type="button"
+                disabled={isUnavailable}
+                onClick={() => handleSlotSelect(slot)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isUnavailable ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'}`}
+              >
+                {slot.startTime} – {slot.endTime}
+                {!isEnabled
+                  ? <span className="block text-xs text-gray-400">Not offered</span>
+                  : isPast
+                  ? <span className="block text-xs text-gray-400">Started</span>
+                  : slot.isBooked
+                    ? <span className="block text-xs text-gray-400">Booked</span>
+                    : <span className="block text-xs text-indigo-500">₹{getPrice(activeTab)}</span>}
+              </button>
+            )
+          })}
           {!loading && filteredSlots.length === 0 && (
-            <p className="text-sm text-gray-400">No {SLOT_LABELS[activeTab]} slots for this date</p>
+            <p className="text-sm text-gray-400">{enabledTabs[activeTab] ? `No ${SLOT_LABELS[activeTab]} slots for this date` : `${SLOT_LABELS[activeTab]} stays are not offered for this room`}</p>
           )}
         </div>
       )}
