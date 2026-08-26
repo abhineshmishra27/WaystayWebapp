@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { getRazorpay } from '@/lib/razorpay'
 import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-db'
+import { rupeesToPaise } from '@/lib/money'
 
 export async function getPendingRazorpayBooking(bookingId: string, customerId?: string) {
   const booking = await prisma.booking.findUnique({
@@ -42,7 +43,7 @@ export async function finalizeRazorpayPayment({
   if (!alreadyConfirmed) {
     const razorpay = getRazorpay()
     const payment = await razorpay.payments.fetch(paymentId)
-    const expectedAmount = Math.round(booking.payment.amount * 100)
+    const expectedAmount = rupeesToPaise(booking.payment.amount)
 
     if (payment.order_id !== orderId) throw new Error('Payment order mismatch')
     if (Number(payment.amount) !== expectedAmount) throw new Error('Payment amount mismatch')

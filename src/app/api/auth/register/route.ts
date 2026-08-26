@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
       req.headers.get('x-real-ip') ||
       'local'
-    const { success } = rateLimit(`register:${ip}:${email}`, 5, 60 * 60 * 1000)
+    const { success } = await rateLimit(`register:${ip}:${email}`, 5, 60 * 60 * 1000)
 
     if (!success) {
       return NextResponse.json(

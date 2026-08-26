@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { requireAdminSession } from '@/lib/admin-auth'
 import BookingManagementTable from '@/components/admin/BookingManagementTable'
+import { moneyToNumber } from '@/lib/money'
 
 export default async function AdminBookingsPage() {
   await requireAdminSession()
@@ -28,7 +29,7 @@ export default async function AdminBookingsPage() {
       <BookingManagementTable initialBookings={bookings.map(booking => ({
         id: booking.id,
         status: booking.status,
-        totalAmount: booking.totalAmount,
+        totalAmount: moneyToNumber(booking.totalAmount),
         checkIn: booking.checkIn.toISOString(),
         checkOut: booking.checkOut.toISOString(),
         guestName: booking.guestName,
@@ -41,7 +42,10 @@ export default async function AdminBookingsPage() {
         hotel: booking.roomSlot.room.hotel,
         room: { name: booking.roomSlot.room.name },
         slot: { type: booking.roomSlot.slotType, date: booking.roomSlot.date, startTime: booking.roomSlot.startTime, endTime: booking.roomSlot.endTime },
-        payment: booking.payment,
+        payment: booking.payment ? {
+          ...booking.payment,
+          amount: moneyToNumber(booking.payment.amount),
+        } : null,
       }))} />
     </div>
   )

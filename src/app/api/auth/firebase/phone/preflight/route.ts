@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'local'
-  const { success } = rateLimit(`firebase-phone:${parsed.data.purpose}:${ip}:${phone}`, 5, 15 * 60 * 1000)
+  const { success } = await rateLimit(`firebase-phone:${parsed.data.purpose}:${ip}:${phone}`, 5, 15 * 60 * 1000)
   if (!success) {
     return NextResponse.json({ error: 'Too many OTP requests. Try again later.' }, { status: 429 })
   }

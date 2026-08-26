@@ -6,7 +6,7 @@ import { suggestSearchPlaces } from '@/lib/search-db'
 export async function GET(req: NextRequest) {
   try {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
-    const { success } = rateLimit(`location-suggest:${ip}`, 120, 60 * 1000)
+    const { success } = await rateLimit(`location-suggest:${ip}`, 120, 60 * 1000)
     if (!success) {
       return NextResponse.json({ error: 'Too many suggestion requests.' }, { status: 429 })
     }

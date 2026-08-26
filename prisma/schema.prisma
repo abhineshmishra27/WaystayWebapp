@@ -308,7 +308,7 @@ model Booking {
   checkIn            DateTime
   checkOut           DateTime
   totalHours         Float
-  totalAmount        Float
+  totalAmount        Decimal       @db.Decimal(12, 2)
   status             BookingStatus @default(PENDING)
   guestName          String
   guestEmail         String
@@ -332,7 +332,7 @@ model BookingExtension {
   bookingId        String
   booking          Booking  @relation(fields: [bookingId], references: [id])
   addedHours       Float
-  additionalAmount Float
+  additionalAmount Decimal  @db.Decimal(12, 2)
   newCheckout      DateTime
   createdAt        DateTime @default(now())
 }
@@ -341,7 +341,7 @@ model Payment {
   id                String          @id @default(cuid())
   bookingId         String          @unique
   booking           Booking         @relation(fields: [bookingId], references: [id])
-  amount            Float
+  amount            Decimal         @db.Decimal(12, 2)
   currency          String          @default("INR")
   provider          PaymentProvider @default(RAZORPAY)
   providerPaymentId String?
@@ -351,6 +351,15 @@ model Payment {
   status            PaymentStatus   @default(PENDING)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
+}
+
+model RateLimitBucket {
+  keyHash   String   @id @db.VarChar(64)
+  count     Int
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
 }
 
 model Review {

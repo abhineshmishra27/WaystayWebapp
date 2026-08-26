@@ -7,6 +7,7 @@ import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
 import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-db'
 import { canCancelBooking } from '@/lib/booking-cancellation'
+import { moneyToNumber, rupeesToPaise } from '@/lib/money'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -56,9 +57,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       try {
         const razorpay = getRazorpay()
         const refund = await razorpay.payments.refund(booking.payment.providerPaymentId, {
-          amount: Math.round(booking.payment.amount * 100),
+          amount: rupeesToPaise(booking.payment.amount),
         })
-        refundAmount = booking.payment.amount
+        refundAmount = moneyToNumber(booking.payment.amount)
         await prisma.payment.update({ where: { bookingId: id }, data: { status: 'REFUNDED', providerRefundId: refund.id, refundedAt: new Date() } })
       } catch (refundErr) {
         console.error('Refund failed:', refundErr)
@@ -66,7 +67,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         return NextResponse.json({ error: 'The refund could not be confirmed. Your booking remains active.' }, { status: 502 })
       }
     } else if (booking.payment?.status === 'REFUNDED') {
-      refundAmount = booking.payment.amount
+      refundAmount = moneyToNumber(booking.payment.amount)
     }
 
     const cancelledAt = cancellationRequestedAt

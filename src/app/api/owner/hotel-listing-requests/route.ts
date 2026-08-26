@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Enter a valid Indian mobile number.' }, { status: 400 })
   }
 
-  if (!rateLimit(`hotel-listing-request:${session!.user.id}`, 6, 60 * 60 * 1000).success) {
+  if (!(await rateLimit(`hotel-listing-request:${session!.user.id}`, 6, 60 * 60 * 1000)).success) {
     return NextResponse.json({ error: 'Too many listing requests. Please try again in an hour.' }, { status: 429 })
   }
 

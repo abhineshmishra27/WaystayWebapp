@@ -9,7 +9,7 @@ import { hasPermission, PERMISSIONS } from '@/lib/rbac'
 const OWNER_DESTINATION = '/owner/hotels'
 
 const emptyApplication = {
-  fullName: '', businessName: '', email: '', phone: '', password: '', gstNumber: '',
+  fullName: null as string | null, businessName: '', email: null as string | null, phone: '', password: '', gstNumber: '',
   city: '', state: '', propertyCount: '1', message: '', website: '',
 }
 
@@ -24,16 +24,6 @@ export default function PartnerPortalPage() {
     if (status === 'authenticated' && hasOwnerAccess) window.location.replace(OWNER_DESTINATION)
   }, [hasOwnerAccess, status])
 
-  useEffect(() => {
-    if (session?.user) {
-      setApplication(current => ({
-        ...current,
-        fullName: current.fullName || session.user.name || '',
-        email: current.email || session.user.email || '',
-      }))
-    }
-  }, [session])
-
   function updateApplication(field: keyof typeof emptyApplication, value: string) {
     setApplication(current => ({ ...current, [field]: value }))
   }
@@ -45,7 +35,12 @@ export default function PartnerPortalPage() {
       const response = await fetch('/api/partner-applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...application, propertyCount: Number(application.propertyCount) }),
+        body: JSON.stringify({
+          ...application,
+          fullName: application.fullName ?? session?.user.name ?? '',
+          email: application.email ?? session?.user.email ?? '',
+          propertyCount: Number(application.propertyCount),
+        }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Your application could not be submitted.')
@@ -94,9 +89,9 @@ export default function PartnerPortalPage() {
           <h2 className="text-2xl font-bold text-slate-900">Hotel-owner application</h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">All fields marked required are used for owner verification. Your password is encrypted and never sent by email.</p>
           <form onSubmit={submitApplication} className="mt-7 grid gap-4 sm:grid-cols-2">
-                <Field label="Owner full name"><input value={application.fullName} onChange={event => updateApplication('fullName', event.target.value)} autoComplete="name" required className={inputClass} /></Field>
+                <Field label="Owner full name"><input value={application.fullName ?? session?.user.name ?? ''} onChange={event => updateApplication('fullName', event.target.value)} autoComplete="name" required className={inputClass} /></Field>
                 <Field label="Business or hotel name"><input value={application.businessName} onChange={event => updateApplication('businessName', event.target.value)} autoComplete="organization" required className={inputClass} /></Field>
-                <Field label="Email address"><input type="email" value={application.email} onChange={event => updateApplication('email', event.target.value)} autoComplete="email" required className={inputClass} /></Field>
+                <Field label="Email address"><input type="email" value={application.email ?? session?.user.email ?? ''} onChange={event => updateApplication('email', event.target.value)} autoComplete="email" required className={inputClass} /></Field>
                 <Field label="Mobile number"><input value={application.phone} onChange={event => updateApplication('phone', event.target.value.replace(/[^0-9+\s-]/g, ''))} inputMode="tel" autoComplete="tel" required className={inputClass} placeholder="10-digit Indian mobile number" /></Field>
                 <Field label="Create password" hint="8+ characters with an uppercase letter and number"><input type="password" value={application.password} onChange={event => updateApplication('password', event.target.value)} autoComplete="new-password" minLength={8} required className={inputClass} /></Field>
                 <Field label="GST number"><input value={application.gstNumber} onChange={event => updateApplication('gstNumber', event.target.value.toUpperCase().replace(/\s/g, '').slice(0, 15))} autoCapitalize="characters" required className={`${inputClass} font-mono uppercase`} placeholder="22AAAAA0000A1Z5" /></Field>

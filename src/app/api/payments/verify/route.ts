@@ -22,7 +22,7 @@ function isRazorpayConfigured() {
 export async function POST(req: NextRequest) {
   try {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
-    const { success } = rateLimit(`payment:${ip}`, 20, 60 * 60 * 1000)
+    const { success } = await rateLimit(`payment:${ip}`, 20, 60 * 60 * 1000)
     if (!success) {
       return NextResponse.json({ error: 'Too many payment verification attempts.' }, { status: 429 })
     }

@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
       || request.headers.get('x-real-ip')
       || 'local'
-    if (!rateLimit(`partner:${ip}:${email}`, 4, 60 * 60 * 1000).success) {
+    if (!(await rateLimit(`partner:${ip}:${email}`, 4, 60 * 60 * 1000)).success) {
       return NextResponse.json({ error: 'Too many application attempts. Please try again in an hour.' }, { status: 429 })
     }
 

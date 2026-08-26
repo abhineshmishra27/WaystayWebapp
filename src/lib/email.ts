@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { formatRupees, type MoneyValue } from '@/lib/money'
 
 const FROM = process.env.EMAIL_FROM || 'Waystay <noreply@waystay.co.in>'
 type EmailPayload = Parameters<Resend['emails']['send']>[0]
@@ -50,7 +51,7 @@ interface BookingEmailData {
   id: string
   checkIn: Date | string
   checkOut: Date | string
-  totalAmount: number
+  totalAmount: MoneyValue
   roomSlot?: {
     room?: {
       name?: string
@@ -76,7 +77,7 @@ export async function sendBookingConfirmation(booking: BookingEmailData) {
         <tr><td style="padding:8px;color:#666">Room</td><td style="padding:8px">${room?.name}</td></tr>
         <tr style="background:#f9f9f9"><td style="padding:8px;color:#666">Check-in</td><td style="padding:8px">${formatDate(booking.checkIn)}</td></tr>
         <tr><td style="padding:8px;color:#666">Check-out</td><td style="padding:8px">${formatDate(booking.checkOut)}</td></tr>
-        <tr style="background:#f9f9f9"><td style="padding:8px;color:#666">Amount paid</td><td style="padding:8px;font-weight:bold;color:#4f46e5">₹${booking.totalAmount}</td></tr>
+        <tr style="background:#f9f9f9"><td style="padding:8px;color:#666">Amount paid</td><td style="padding:8px;font-weight:bold;color:#4f46e5">₹${formatRupees(booking.totalAmount)}</td></tr>
       </table>
       <p style="margin-top:24px;color:#666">Thank you for choosing WayStayy!</p>
     </div>`,

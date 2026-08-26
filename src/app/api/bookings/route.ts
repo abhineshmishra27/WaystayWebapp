@@ -13,6 +13,7 @@ import { lockRoomInventory } from '@/lib/booking-inventory-db'
 import { slotIsPastForBooking, todayInIndia } from '@/lib/booking-time'
 import { roomAllowsSlotType } from '@/lib/room-slot-settings'
 import { createBookingDateTimes } from '@/lib/booking-datetime'
+import { moneyToNumber, rupeesToPaise } from '@/lib/money'
 
 const createBookingSchema = z.object({
   slotId: z.string(),
@@ -84,7 +85,18 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json(bookings)
+    return NextResponse.json(bookings.map(booking => ({
+      ...booking,
+      totalAmount: moneyToNumber(booking.totalAmount),
+      payment: booking.payment ? {
+        ...booking.payment,
+        amount: moneyToNumber(booking.payment.amount),
+      } : null,
+      extensions: booking.extensions.map(extension => ({
+        ...extension,
+        additionalAmount: moneyToNumber(extension.additionalAmount),
+      })),
+    })))
   } catch {
     return NextResponse.json({ error: 'Failed to fetch bookings' }, { status: 500 })
   }
@@ -93,7 +105,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
-    const { success } = rateLimit(`booking:${ip}`, 10, 60 * 60 * 1000)
+    const { success } = await rateLimit(`booking:${ip}`, 10, 60 * 60 * 1000)
     if (!success) {
       return NextResponse.json({ error: 'Too many booking attempts.' }, { status: 429 })
     }
@@ -224,7 +236,7 @@ export async function POST(req: NextRequest) {
       try {
         const razorpay = getRazorpay()
         order = await razorpay.orders.create({
-          amount: Math.round(booking.totalAmount * 100),
+          amount: rupeesToPaise(booking.totalAmount),
           currency: 'INR',
           receipt: booking.id.slice(-20),
           notes: {
@@ -266,7 +278,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         bookingId: result.booking.id,
         paymentMethod: 'PAY_AT_HOTEL',
-        amount: Math.round(result.booking.totalAmount * 100),
+        amount: rupeesToPaise(result.booking.totalAmount),
         currency: 'INR',
       }, { status: 201 })
     }
@@ -274,7 +286,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       bookingId: result.booking.id,
       razorpayOrderId: result.razorpayOrderId,
-      amount: Math.round(result.booking.totalAmount * 100),
+      amount: rupeesToPaise(result.booking.totalAmount),
       currency: 'INR',
     }, { status: 201 })
   } catch (err) {
