@@ -5,7 +5,7 @@ import { bookingHasEnded, createBookingDateTimes, effectiveBookingCheckOut } fro
 test('a single full-day stay checks out the following morning', () => {
   const { checkIn, checkOut } = createBookingDateTimes({
     startDate: '2026-08-23',
-    endDate: '2026-08-23',
+    endDate: '2026-08-24',
     slotType: 'FULLDAY',
     startTime: '12:00',
     endTime: '11:00',
@@ -18,13 +18,25 @@ test('a single full-day stay checks out the following morning', () => {
 test('a multi-day full-day stay checks out after the final booked night', () => {
   const { checkOut } = createBookingDateTimes({
     startDate: '2026-08-23',
-    endDate: '2026-08-24',
+    endDate: '2026-08-25',
     slotType: 'FULLDAY',
     startTime: '12:00',
     endTime: '11:00',
   })
 
   assert.equal(checkOut.toISOString(), '2026-08-25T05:30:00.000Z')
+})
+
+test('legacy same-date full-day ranges still represent one night', () => {
+  const { checkOut } = createBookingDateTimes({
+    startDate: '2026-08-23',
+    endDate: '2026-08-23',
+    slotType: 'FULLDAY',
+    startTime: '12:00',
+    endTime: '11:00',
+  })
+
+  assert.equal(checkOut.toISOString(), '2026-08-24T05:30:00.000Z')
 })
 
 test('hourly stays keep checkout on the selected date', () => {

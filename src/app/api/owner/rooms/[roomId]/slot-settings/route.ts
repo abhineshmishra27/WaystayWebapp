@@ -10,10 +10,12 @@ const settingsSchema = z.object({
   sixHourEnabled: z.boolean().optional(),
   twelveHourEnabled: z.boolean().optional(),
   nightStayEnabled: z.boolean().optional(),
+  inventoryCount: z.number().int().min(1).max(100).optional(),
 }).strict().refine(settings => Object.keys(settings).length > 0, 'At least one setting is required')
 
 const settingsSelect = {
   id: true,
+  inventoryCount: true,
   threeHourEnabled: true,
   sixHourEnabled: true,
   twelveHourEnabled: true,

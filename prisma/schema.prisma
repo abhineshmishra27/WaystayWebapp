@@ -56,6 +56,13 @@ enum MediaType {
   VIDEO
 }
 
+enum LocationType {
+  CITY
+  LOCALITY
+  LANDMARK
+  AIRPORT
+}
+
 enum PartnerApplicationStatus {
   PENDING
   APPROVED
@@ -155,29 +162,32 @@ model OtpChallenge {
 }
 
 model Hotel {
-  id              String       @id @default(cuid())
+  id              String                                @id @default(cuid())
   ownerId         String
-  owner           User         @relation(fields: [ownerId], references: [id])
+  owner           User                                  @relation(fields: [ownerId], references: [id])
+  locationId      String?
+  location        Location?                             @relation(fields: [locationId], references: [id], onDelete: SetNull)
   name            String
   description     String
   address         String
   city            String
   state           String
-  country         String       @default("India")
+  country         String                                @default("India")
   pincode         String
   lat             Float
   lng             Float
-  highway_tag     Boolean      @default(false)
-  checkInTime     String       @default("12:00")
-  checkOutTime    String       @default("11:00")
+  geoPoint        Unsupported("geography(Point,4326)")? @map("geoPoint")
+  highway_tag     Boolean                               @default(false)
+  checkInTime     String                                @default("12:00")
+  checkOutTime    String                                @default("11:00")
   amenities       String[]
-  isApproved      Boolean      @default(false)
-  isActive        Boolean      @default(true)
-  ownerEnabled    Boolean      @default(true)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  checkin_policy  String       @default("Check-in time is 12 PM")
-  checkout_policy String       @default("Check-out time is 11 AM")
+  isApproved      Boolean                               @default(false)
+  isActive        Boolean                               @default(true)
+  ownerEnabled    Boolean                               @default(true)
+  createdAt       DateTime                              @default(now())
+  updatedAt       DateTime                              @updatedAt
+  checkin_policy  String                                @default("Check-in time is 12 PM")
+  checkout_policy String                                @default("Check-out time is 11 AM")
   images          HotelImage[]
   rooms           Room[]
   reviews         Review[]
@@ -187,6 +197,42 @@ model Hotel {
   gst_number      String
   restaurant      Restaurant?
   auditLogs       AuditLog[]
+
+  @@index([locationId])
+}
+
+model Location {
+  id               String          @id @default(cuid())
+  name             String
+  normalizedName   String
+  type             LocationType
+  state            String?
+  parentLocationId String?
+  parentLocation   Location?       @relation("LocationHierarchy", fields: [parentLocationId], references: [id], onDelete: SetNull)
+  childLocations   Location[]      @relation("LocationHierarchy")
+  latitude         Float
+  longitude        Float
+  radiusKm         Float?
+  boundary         Json?
+  aliases          LocationAlias[]
+  hotels           Hotel[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([normalizedName])
+  @@index([parentLocationId, type])
+}
+
+model LocationAlias {
+  id              String   @id @default(cuid())
+  alias           String
+  normalizedAlias String
+  locationId      String
+  location        Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+
+  @@unique([normalizedAlias, locationId])
+  @@index([normalizedAlias])
 }
 
 model HotelImage {
@@ -220,6 +266,7 @@ model Room {
   sixHourEnabled      Boolean    @default(true)
   twelveHourEnabled   Boolean    @default(true)
   nightStayEnabled    Boolean    @default(true)
+  inventoryCount      Int        @default(1)
   maxOccupancy        Int        @default(3)
   amenities           String[]
   images              String[]

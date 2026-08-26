@@ -12,10 +12,31 @@ const OPTIONS: Array<{ key: SettingKey; label: string; description: string }> = 
   { key: 'nightStayEnabled', label: 'Night stay', description: 'Full-day booking' },
 ]
 
-export default function RoomStayOptionControls({ roomId, initialSettings }: { roomId: string; initialSettings: RoomSlotSettings }) {
+export default function RoomStayOptionControls({
+  roomId,
+  initialSettings,
+  initialInventoryCount,
+}: {
+  roomId: string
+  initialSettings: RoomSlotSettings
+  initialInventoryCount: number
+}) {
   const [settings, setSettings] = useState(initialSettings)
-  const [saving, setSaving] = useState<SettingKey | null>(null)
+  const [inventoryCount, setInventoryCount] = useState(initialInventoryCount)
+  const [inventoryDraft, setInventoryDraft] = useState(String(initialInventoryCount))
+  const [saving, setSaving] = useState<SettingKey | 'inventoryCount' | null>(null)
   const [message, setMessage] = useState('')
+
+  function applyResponse(data: { room: RoomSlotSettings & { inventoryCount: number } }) {
+    setSettings({
+      threeHourEnabled: data.room.threeHourEnabled,
+      sixHourEnabled: data.room.sixHourEnabled,
+      twelveHourEnabled: data.room.twelveHourEnabled,
+      nightStayEnabled: data.room.nightStayEnabled,
+    })
+    setInventoryCount(data.room.inventoryCount)
+    setInventoryDraft(String(data.room.inventoryCount))
+  }
 
   async function toggle(key: SettingKey) {
     const enabled = !settings[key]
@@ -29,12 +50,7 @@ export default function RoomStayOptionControls({ roomId, initialSettings }: { ro
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Unable to update this stay option.')
-      setSettings({
-        threeHourEnabled: data.room.threeHourEnabled,
-        sixHourEnabled: data.room.sixHourEnabled,
-        twelveHourEnabled: data.room.twelveHourEnabled,
-        nightStayEnabled: data.room.nightStayEnabled,
-      })
+      applyResponse(data)
       setMessage(`${OPTIONS.find(option => option.key === key)?.label} ${enabled ? 'enabled' : 'disabled'}.`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to update this stay option.')
@@ -43,8 +59,61 @@ export default function RoomStayOptionControls({ roomId, initialSettings }: { ro
     }
   }
 
+  async function updateInventory() {
+    const nextInventory = parseInt(inventoryDraft, 10)
+    if (!Number.isInteger(nextInventory) || nextInventory < 1 || nextInventory > 100) {
+      setMessage('Room inventory must be between 1 and 100.')
+      return
+    }
+
+    setSaving('inventoryCount')
+    setMessage('')
+    try {
+      const response = await fetch(`/api/owner/rooms/${roomId}/slot-settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inventoryCount: nextInventory }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Unable to update room inventory.')
+      applyResponse(data)
+      setMessage(`Inventory updated to ${nextInventory} room${nextInventory === 1 ? '' : 's'}.`)
+    } catch (error) {
+      setInventoryDraft(String(inventoryCount))
+      setMessage(error instanceof Error ? error.message : 'Unable to update room inventory.')
+    } finally {
+      setSaving(null)
+    }
+  }
+
   return (
     <div>
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+        <div>
+          <label htmlFor={`inventory-${roomId}`} className="block text-sm font-semibold text-gray-800">Rooms in this category</label>
+          <p className="mt-0.5 text-[11px] text-gray-500">Bookings consume this shared room inventory only while their times overlap.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            id={`inventory-${roomId}`}
+            type="number"
+            min={1}
+            max={100}
+            value={inventoryDraft}
+            disabled={saving !== null}
+            onChange={event => setInventoryDraft(event.target.value)}
+            className="w-20 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm text-gray-800 disabled:opacity-60"
+          />
+          <button
+            type="button"
+            disabled={saving !== null || inventoryDraft === String(inventoryCount)}
+            onClick={updateInventory}
+            className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving === 'inventoryCount' ? 'Saving…' : 'Update'}
+          </button>
+        </div>
+      </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {OPTIONS.map(option => {
           const enabled = settings[option.key]
@@ -68,7 +137,7 @@ export default function RoomStayOptionControls({ roomId, initialSettings }: { ro
           )
         })}
       </div>
-      <p className="mt-2 min-h-4 text-xs text-gray-500" aria-live="polite">{saving ? 'Saving stay-option availability…' : message}</p>
+      <p className="mt-2 min-h-4 text-xs text-gray-500" aria-live="polite">{saving ? 'Saving room settings…' : message}</p>
     </div>
   )
 }

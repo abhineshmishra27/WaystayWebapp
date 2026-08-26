@@ -23,6 +23,25 @@ export function todayInIndia(now = new Date()) {
   return dateTimeParts(now).date
 }
 
+function followingDate(date: string) {
+  const nextDate = new Date(`${date}T00:00:00Z`)
+  nextDate.setUTCDate(nextDate.getUTCDate() + 1)
+  return nextDate.toISOString().slice(0, 10)
+}
+
+export function defaultSearchDateForSlot(slotType: string, now = new Date()) {
+  const current = dateTimeParts(now)
+  const finalStartMinutes: Record<string, number> = {
+    H3: 15 * 60,
+    H6: 12 * 60,
+    H12: 6 * 60,
+  }
+  const finalStart = finalStartMinutes[slotType]
+  return finalStart !== undefined && current.minutes >= finalStart
+    ? followingDate(current.date)
+    : current.date
+}
+
 export function slotHasStarted(date: string, startTime: string, now = new Date()) {
   const dateMatch = /^\d{4}-\d{2}-\d{2}$/.test(date)
   const timeMatch = /^(\d{2}):(\d{2})$/.exec(startTime)

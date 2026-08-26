@@ -7,11 +7,11 @@ const SLOT_LABELS: Record<string, string> = { H3: '3 Hours', H6: '6 Hours', H12:
 type SlotType = 'H3' | 'H6' | 'H12' | 'FULLDAY'
 const DEFAULT_MAX_GUESTS_PER_ROOM = 3
 
-function daysInRange(startDate: string, endDate: string) {
+function nightsInRange(startDate: string, endDate: string) {
   const start = new Date(`${startDate}T00:00:00`)
   const end = new Date(`${endDate}T00:00:00`)
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 1
-  return Math.floor((end.getTime() - start.getTime()) / 86400000) + 1
+  return Math.max(1, Math.floor((end.getTime() - start.getTime()) / 86400000))
 }
 
 function getTodayDateString() {
@@ -19,6 +19,15 @@ function getTodayDateString() {
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function addDays(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00`)
+  date.setDate(date.getDate() + days)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
 
@@ -50,6 +59,7 @@ export default function SlotPicker({
   priceFullDay,
   hotelId,
   maxGuestsPerRoom = DEFAULT_MAX_GUESTS_PER_ROOM,
+  inventoryCount = 1,
   initialSlotType = 'H3',
   initialStartDate,
   initialEndDate,
@@ -67,6 +77,7 @@ export default function SlotPicker({
   priceFullDay: number
   hotelId: string
   maxGuestsPerRoom?: number
+  inventoryCount?: number
   initialSlotType?: SlotType
   initialStartDate?: string
   initialEndDate?: string
@@ -85,18 +96,27 @@ export default function SlotPicker({
     FULLDAY: nightStayEnabled,
   }
   const firstEnabledTab = (Object.keys(enabledTabs) as SlotType[]).find(tab => enabledTabs[tab])
+  const initialActiveTab = enabledTabs[initialSlotType] ? initialSlotType : firstEnabledTab ?? initialSlotType
   const today = getTodayDateString()
   const initialSafeStartDate = clampToToday(initialStartDate, today)
   const initialSafeEndDate = clampToToday(initialEndDate || initialStartDate, today)
   const [startDate, setStartDate] = useState(initialSafeStartDate)
-  const [endDate, setEndDate] = useState(initialSafeEndDate >= initialSafeStartDate ? initialSafeEndDate : initialSafeStartDate)
-  const [activeTab, setActiveTab] = useState<SlotType>(enabledTabs[initialSlotType] ? initialSlotType : firstEnabledTab ?? initialSlotType)
+  const [endDate, setEndDate] = useState(
+    initialActiveTab === 'FULLDAY'
+      ? initialSafeEndDate > initialSafeStartDate ? initialSafeEndDate : addDays(initialSafeStartDate, 1)
+      : initialSafeStartDate,
+  )
+  const [activeTab, setActiveTab] = useState<SlotType>(initialActiveTab)
   const [availability, setAvailability] = useState<Record<string, SlotOption[]>>({})
   const [loading, setLoading] = useState(false)
   const [currentTime, setCurrentTime] = useState(() => new Date())
   const guestsPerRoomLimit = Math.max(1, Math.min(maxGuestsPerRoom, DEFAULT_MAX_GUESTS_PER_ROOM))
+  const roomSelectionLimit = Math.max(1, Math.min(10, inventoryCount))
   const [guestCount, setGuestCount] = useState(positiveInt(initialGuestCount, 1))
-  const [roomCount, setRoomCount] = useState(Math.max(positiveInt(initialRoomCount, 1), Math.ceil(positiveInt(initialGuestCount, 1) / guestsPerRoomLimit)))
+  const [roomCount, setRoomCount] = useState(Math.min(
+    roomSelectionLimit,
+    Math.max(positiveInt(initialRoomCount, 1), Math.ceil(positiveInt(initialGuestCount, 1) / guestsPerRoomLimit)),
+  ))
   const requiredRooms = Math.max(1, Math.ceil(guestCount / guestsPerRoomLimit))
 
   useEffect(() => {
@@ -110,7 +130,11 @@ export default function SlotPicker({
     async function fetchAvailability() {
       setLoading(true)
       try {
-        const params = new URLSearchParams({ startDate, endDate: activeTab === 'FULLDAY' ? endDate : startDate })
+        const params = new URLSearchParams({
+          startDate,
+          endDate: activeTab === 'FULLDAY' ? endDate : startDate,
+          roomCount: roomCount.toString(),
+        })
         const res = await fetch(`/api/rooms/${roomId}/availability?${params.toString()}`)
         const data = await res.json()
         if (!cancelled) {
@@ -128,14 +152,14 @@ export default function SlotPicker({
     return () => {
       cancelled = true
     }
-  }, [activeTab, endDate, roomId, startDate])
+  }, [activeTab, endDate, roomCount, roomId, startDate])
 
   const currentSlots = availability?.[startDate] ?? []
   const filteredSlots = currentSlots.filter(slot => slot.slotType === activeTab)
 
   const getPrice = (slotType: string) => {
     const basePrice = slotType === 'FULLDAY'
-      ? priceFullDay * daysInRange(startDate, endDate)
+      ? priceFullDay * nightsInRange(startDate, endDate)
       : slotType === 'H3'
         ? price3h
         : slotType === 'H6'
@@ -149,11 +173,11 @@ export default function SlotPicker({
     const safeGuests = Math.max(1, Math.min(30, nextGuests))
     const nextRequiredRooms = Math.max(1, Math.ceil(safeGuests / guestsPerRoomLimit))
     setGuestCount(safeGuests)
-    setRoomCount(prev => Math.max(prev, nextRequiredRooms))
+    setRoomCount(prev => Math.min(roomSelectionLimit, Math.max(prev, nextRequiredRooms)))
   }
 
   const updateRoomCount = (nextRooms: number) => {
-    setRoomCount(Math.max(requiredRooms, Math.min(10, nextRooms)))
+    setRoomCount(Math.max(requiredRooms, Math.min(roomSelectionLimit, nextRooms)))
   }
 
   const handleSlotSelect = (slot: SlotOption) => {
@@ -187,7 +211,8 @@ export default function SlotPicker({
           min={today}
           onChange={e => {
             setStartDate(e.target.value)
-            if (endDate < e.target.value) setEndDate(e.target.value)
+            if (activeTab === 'FULLDAY' && endDate <= e.target.value) setEndDate(addDays(e.target.value, 1))
+            if (activeTab !== 'FULLDAY') setEndDate(e.target.value)
           }}
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
         />
@@ -195,7 +220,7 @@ export default function SlotPicker({
         <input
           type="date"
           value={endDate}
-          min={startDate}
+          min={addDays(startDate, 1)}
           onChange={e => setEndDate(e.target.value)}
           disabled={activeTab !== 'FULLDAY'}
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm disabled:bg-gray-50 disabled:text-gray-400"
@@ -216,12 +241,14 @@ export default function SlotPicker({
           <div className="flex items-center justify-between rounded-lg border border-gray-200 px-2 py-1.5">
             <button type="button" onClick={() => updateRoomCount(roomCount - 1)} disabled={roomCount <= requiredRooms} className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40" aria-label="Decrease rooms">-</button>
             <span className="font-medium text-gray-800">{roomCount}</span>
-            <button type="button" onClick={() => updateRoomCount(roomCount + 1)} className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50" aria-label="Increase rooms">+</button>
+            <button type="button" onClick={() => updateRoomCount(roomCount + 1)} disabled={roomCount >= roomSelectionLimit} className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40" aria-label="Increase rooms">+</button>
           </div>
         </div>
         <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
           <span className="block font-medium text-gray-700">Max {guestsPerRoomLimit} guests per room</span>
-          {requiredRooms > 1 ? `${guestCount} guests need at least ${requiredRooms} rooms.` : 'One room is enough for this group.'}
+          {requiredRooms > roomSelectionLimit
+            ? `This category has only ${roomSelectionLimit} room${roomSelectionLimit === 1 ? '' : 's'}; reduce the guest count.`
+            : requiredRooms > 1 ? `${guestCount} guests need at least ${requiredRooms} rooms.` : 'One room is enough for this group.'}
         </div>
       </div>
 
@@ -233,6 +260,7 @@ export default function SlotPicker({
             disabled={!enabledTabs[t]}
             onClick={() => {
               setActiveTab(t)
+              if (t === 'FULLDAY' && endDate <= startDate) setEndDate(addDays(startDate, 1))
               if (t !== 'FULLDAY') setEndDate(startDate)
             }}
             className={`flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:text-gray-300 ${activeTab === t ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
@@ -253,7 +281,7 @@ export default function SlotPicker({
           {filteredSlots.map(slot => {
             const isPast = Boolean(slot.hasStarted) || slotIsPastForBooking(slot.slotType, slot.date, slot.startTime, currentTime)
             const isEnabled = enabledTabs[activeTab] && slot.isEnabled !== false
-            const isUnavailable = !isEnabled || slot.isBooked || isPast
+            const isUnavailable = !isEnabled || slot.isBooked || isPast || requiredRooms > roomSelectionLimit
 
             return (
               <button
@@ -261,7 +289,7 @@ export default function SlotPicker({
                 type="button"
                 disabled={isUnavailable}
                 onClick={() => handleSlotSelect(slot)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isUnavailable ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'}`}
+                className={`min-w-32 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors ${isUnavailable ? 'border-gray-100 bg-gray-100 text-gray-300 cursor-not-allowed' : 'border-orange-200 bg-[var(--waystay-orange-soft)] text-gray-800 shadow-sm hover:border-[var(--waystay-orange)] hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-100'}`}
               >
                 {slot.startTime} – {slot.endTime}
                 {!isEnabled
@@ -270,7 +298,7 @@ export default function SlotPicker({
                   ? <span className="block text-xs text-gray-400">Started</span>
                   : slot.isBooked
                     ? <span className="block text-xs text-gray-400">Booked</span>
-                    : <span className="block text-xs text-indigo-500">₹{getPrice(activeTab)}</span>}
+                    : <span className="mt-0.5 block text-sm font-bold text-[var(--waystay-orange-dark)]">₹{getPrice(activeTab)}</span>}
               </button>
             )
           })}

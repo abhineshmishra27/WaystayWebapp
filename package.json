@@ -13,6 +13,7 @@
     "test:booking-time": "node --no-warnings --test tests/booking-time.test.mts",
     "test:room-slot-settings": "node --no-warnings --test tests/room-slot-settings.test.mts",
     "test:booking-cancellation": "node --no-warnings --test tests/booking-cancellation.test.mts",
+    "test:location-search": "node --no-warnings --test tests/location-search.test.mts",
     "test:partner-rbac": "node --no-warnings --test tests/partner-rbac.test.mts",
     "rbac:ensure-primary-admin": "node scripts/ensure-primary-admin.js"
   },

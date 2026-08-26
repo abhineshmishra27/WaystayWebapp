@@ -29,6 +29,7 @@ export default async function OwnerHotelsPage() {
             type: true,
             isActive: true,
             available: true,
+            inventoryCount: true,
             price_3h: true,
             price_6h: true,
             price_12h: true,
@@ -106,6 +107,7 @@ export default async function OwnerHotelsPage() {
                         </div>
                         <RoomStayOptionControls
                           roomId={room.id}
+                          initialInventoryCount={room.inventoryCount}
                           initialSettings={{
                             threeHourEnabled: room.threeHourEnabled,
                             sixHourEnabled: room.sixHourEnabled,

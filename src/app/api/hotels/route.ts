@@ -5,6 +5,7 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { getEffectiveRole, hasPermission, PERMISSIONS, sessionHasPermission } from '@/lib/rbac'
+import { resolveLocationFromDatabase } from '@/lib/search-db'
 
 const createHotelSchema = z.object({
   ownerId: z.string().min(1),
@@ -91,11 +92,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Choose an active approved hotel owner.' }, { status: 400 })
     }
 
+    const canonicalLocation = await resolveLocationFromDatabase(parsed.data.pincode)
+      ?? await resolveLocationFromDatabase(parsed.data.city)
+
     const hotel = await prisma.$transaction(async transaction => {
       const created = await transaction.hotel.create({
         data: {
           ...hotelData,
           ownerId,
+          locationId: canonicalLocation?.location.id,
           total_review: 0,
           images: {
             create: imageUrls.map((img, idx) => ({

@@ -532,6 +532,13 @@
     return result;
   }
 
+  function defaultHourlySearchDate(slotType, now = new Date()) {
+    const finalStartMinutes = { H3: 15 * 60, H6: 12 * 60, H12: 6 * 60 };
+    const cutoff = finalStartMinutes[slotType];
+    const currentMinutes = (now.getHours() * 60) + now.getMinutes();
+    return cutoff !== undefined && currentMinutes >= cutoff ? addDays(now, 1) : now;
+  }
+
   function nightsBetween(checkIn, checkOut) {
     if (!checkIn || !checkOut) return 0;
     const start = new Date(`${checkIn}T00:00:00`);
@@ -610,10 +617,11 @@
   today.setHours(0, 0, 0, 0);
   const todayValue = toDateValue(today);
   const tomorrowValue = toDateValue(addDays(today, 1));
+  let hourlyDateWasChosen = false;
 
   if (dateInput) {
     dateInput.min = todayValue;
-    dateInput.value = todayValue;
+    dateInput.value = toDateValue(defaultHourlySearchDate(durationInput?.value || 'H3'));
   }
   if (checkInInput) {
     checkInInput.min = todayValue;
@@ -628,8 +636,16 @@
     button.addEventListener('click', () => setStayMode(button.dataset.stayMode));
   });
 
-  dateInput?.addEventListener('change', updateSearchHref);
-  durationInput?.addEventListener('change', updateSearchHref);
+  dateInput?.addEventListener('change', () => {
+    hourlyDateWasChosen = true;
+    updateSearchHref();
+  });
+  durationInput?.addEventListener('change', () => {
+    if (dateInput && !hourlyDateWasChosen) {
+      dateInput.value = toDateValue(defaultHourlySearchDate(durationInput.value || 'H3'));
+    }
+    updateSearchHref();
+  });
   checkInInput?.addEventListener('change', () => {
     if (!checkInInput.value) return;
     const earliestCheckout = toDateValue(addDays(new Date(`${checkInInput.value}T00:00:00`), 1));

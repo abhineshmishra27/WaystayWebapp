@@ -110,7 +110,7 @@ export default async function HotelDetailPage({
             </div>
           )}
 
-          <div>
+          <div id="available-rooms" className="scroll-mt-8">
             <h2 className="text-xl font-semibold mb-4">Available rooms</h2>
             {hotel.rooms.map((room: RoomWithDetails) => (
               <div key={room.id} className="bg-white rounded-2xl border border-gray-100 p-6 mb-4">
@@ -124,7 +124,9 @@ export default async function HotelDetailPage({
                   </div>
                   <div className="text-right">
                     <p className="text-indigo-600 font-bold">₹{getSlotPrice(room, selectedSlot)}<span className="text-xs text-gray-400 font-normal"> {getSlotLabel(selectedSlot)}</span></p>
-                    <p className="text-gray-500 text-sm">₹{room.priceFullDay} full day</p>
+                    {selectedSlot !== 'FULLDAY' && (
+                      <p className="text-gray-500 text-sm">₹{room.priceFullDay} full day</p>
+                    )}
                   </div>
                 </div>
                 {room.images.length > 0 && (
@@ -162,6 +164,7 @@ export default async function HotelDetailPage({
                   priceFullDay={room.priceFullDay}
                   hotelId={hotel.id}
                   maxGuestsPerRoom={Math.min(room.maxOccupancy, 3)}
+                  inventoryCount={room.inventoryCount}
                   initialSlotType={selectedSlot}
                   initialStartDate={initialStartDate}
                   initialEndDate={initialEndDate}
@@ -183,11 +186,15 @@ export default async function HotelDetailPage({
 
         <div className="hidden lg:block">
           <div className="bg-white rounded-2xl border border-gray-100 p-6 sticky top-8">
-            <p className="text-2xl font-bold text-indigo-600">₹{hotel.rooms[0] ? getSlotPrice(hotel.rooms[0], selectedSlot) : '–'}<span className="text-sm text-gray-400 font-normal"> {getSlotLabel(selectedSlot)}</span></p>
-            <p className="text-gray-500 text-sm mb-1">Selected slot price · scroll down to choose a room</p>
-            <p className="text-gray-500 text-sm mb-4">Full day from ₹{hotel.rooms[0]?.priceFullDay || '–'}</p>
+            <p className="text-2xl font-bold text-[var(--waystay-blue)]">
+              ₹{hotel.rooms[0] ? getSlotPrice(hotel.rooms[0], selectedSlot) : '–'}
+              <span className="ml-1 text-sm font-semibold text-gray-500">{getSlotLabel(selectedSlot)}</span>
+            </p>
+            {selectedSlot !== 'FULLDAY' && (
+              <p className="mt-1 text-sm text-gray-600">Full day from ₹{hotel.rooms[0]?.priceFullDay || '–'}</p>
+            )}
             <div className="space-y-2 text-sm text-gray-600">
-              <div className="flex justify-between"><span>Check-in</span><span className="font-medium">{hotel.checkInTime}</span></div>
+              <div className="mt-5 flex justify-between"><span>Check-in</span><span className="font-medium">{hotel.checkInTime}</span></div>
               <div className="flex justify-between"><span>Check-out</span><span className="font-medium">{hotel.checkOutTime}</span></div>
             </div>
           </div>

@@ -1,12 +1,13 @@
 'use client'
 
-import { Suspense, useEffect } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import toast, { Toaster } from 'react-hot-toast'
+import { fullDayStayDates } from '@/lib/booking-inventory'
 
 const schema = z.object({
   guestName: z.string().min(2, 'Name required'),
@@ -45,6 +46,10 @@ function BookingPreview() {
   const guestCount = positiveInt(queryParams.get('guestCount'), 1)
   const roomCount = positiveInt(queryParams.get('roomCount'), 1)
   const maxGuestsPerRoom = positiveInt(queryParams.get('maxGuestsPerRoom'), 3)
+  const nightCount = slotType === 'FULLDAY'
+    ? Math.max(1, fullDayStayDates(startDate, endDate).length)
+    : 1
+  const [quotedPrice, setQuotedPrice] = useState(price)
 
   const {
     register,
@@ -63,6 +68,34 @@ function BookingPreview() {
     if (session?.user?.name) setValue('guestName', session.user.name)
     if (session?.user?.email) setValue('guestEmail', session.user.email)
   }, [session, setValue])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function refreshQuote() {
+      if (!hotelId || !roomId || !slotType) return
+      try {
+        const response = await fetch(`/api/hotels/${encodeURIComponent(hotelId)}`)
+        if (!response.ok) return
+        const hotel = await response.json()
+        const room = hotel.rooms?.find((candidate: { id: string }) => candidate.id === roomId)
+        if (!room || cancelled) return
+        const basePrice = slotType === 'FULLDAY'
+          ? room.priceFullDay * nightCount
+          : slotType === 'H6'
+            ? room.price_6h
+            : slotType === 'H12'
+              ? room.price_12h
+              : room.price_3h
+        setQuotedPrice(basePrice * roomCount)
+      } catch {
+        // The booking API recalculates the authoritative amount before charging.
+      }
+    }
+
+    void refreshQuote()
+    return () => { cancelled = true }
+  }, [hotelId, nightCount, price, roomCount, roomId, slotType])
 
   useEffect(() => {
     if (!session) return
@@ -106,7 +139,7 @@ function BookingPreview() {
       startTime,
       endTime,
       slotType,
-      price: price.toString(),
+      price: quotedPrice.toString(),
       guestName: data.guestName,
       guestEmail: data.guestEmail,
       guestPhone: data.guestPhone,
@@ -131,13 +164,16 @@ function BookingPreview() {
               <div className="flex justify-between"><span className="text-gray-500">Start date</span><span className="font-medium">{startDate}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">End date</span><span className="font-medium">{endDate}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Duration</span><span className="font-medium">{SLOT_LABELS[slotType] || 'Custom'}</span></div>
+              {slotType === 'FULLDAY' && (
+                <div className="flex justify-between"><span className="text-gray-500">Nights</span><span className="font-medium">{nightCount}</span></div>
+              )}
               <div className="flex justify-between"><span className="text-gray-500">Time</span><span className="font-medium">{startTime} - {endTime}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Guests</span><span className="font-medium">{guestCount}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Rooms</span><span className="font-medium">{roomCount}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Capacity</span><span className="font-medium">{maxGuestsPerRoom} guests/room</span></div>
               <div className="border-t border-gray-100 pt-3 flex justify-between text-base">
                 <span className="font-semibold">Total</span>
-                <span className="font-bold text-indigo-600">₹{price}</span>
+                <span className="font-bold text-indigo-600">₹{quotedPrice}</span>
               </div>
             </div>
           )}

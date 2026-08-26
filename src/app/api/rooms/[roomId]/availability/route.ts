@@ -12,6 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
     const date = searchParams.get('date')
     const startDate = searchParams.get('startDate') ?? date
     const endDate = searchParams.get('endDate') ?? startDate
+    const requestedRoomCount = Math.max(1, Math.min(10, parseInt(searchParams.get('roomCount') || '1', 10) || 1))
 
     const now = new Date()
     const today = todayInIndia(now)
@@ -28,7 +29,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
     const [room, slots, activeBookings] = await Promise.all([
       prisma.room.findUnique({
         where: { id: roomId },
-        select: { threeHourEnabled: true, sixHourEnabled: true, twelveHourEnabled: true, nightStayEnabled: true },
+        select: {
+          inventoryCount: true,
+          threeHourEnabled: true,
+          sixHourEnabled: true,
+          twelveHourEnabled: true,
+          nightStayEnabled: true,
+        },
       }),
       prisma.roomSlot.findMany({
         where,
@@ -41,6 +48,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
         },
         select: {
           totalHours: true,
+          roomCount: true,
           roomSlot: { select: { date: true, slotType: true, startTime: true, endTime: true } },
         },
       }),
@@ -59,7 +67,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
           startTime: slot.startTime,
           endTime: slot.endTime,
           slotType: slot.slotType,
-          isBooked: slot.isBooked || slotIsUnavailable(slot, activeBookings, slot.slotType === 'FULLDAY' ? effectiveEndDate : slot.date),
+          isBooked: slotIsUnavailable(
+            slot,
+            activeBookings,
+            slot.slotType === 'FULLDAY' ? effectiveEndDate : slot.date,
+            room.inventoryCount,
+            requestedRoomCount,
+          ),
           hasStarted,
           isEnabled,
         })

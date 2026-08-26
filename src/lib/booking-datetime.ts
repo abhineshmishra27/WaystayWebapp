@@ -31,7 +31,9 @@ export function createBookingDateTimes({
   startTime: string
   endTime: string
 }) {
-  const checkOutDate = slotType === 'FULLDAY' ? addDays(endDate, 1) : endDate
+  const checkOutDate = slotType === 'FULLDAY'
+    ? endDate > startDate ? endDate : addDays(startDate, 1)
+    : endDate
   return {
     checkIn: bookingDateTime(startDate, startTime),
     checkOut: bookingDateTime(checkOutDate, endTime),

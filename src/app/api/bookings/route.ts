@@ -8,7 +8,7 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
-import { bookingConflictsWithRequest, dateRangeStrings } from '@/lib/booking-inventory'
+import { dateRangeStrings, fullDayStayDates, requestHasCapacity } from '@/lib/booking-inventory'
 import { lockRoomInventory } from '@/lib/booking-inventory-db'
 import { slotIsPastForBooking, todayInIndia } from '@/lib/booking-time'
 import { roomAllowsSlotType } from '@/lib/room-slot-settings'
@@ -48,6 +48,7 @@ function isBookingConflict(error: Error) {
     'Multi-day bookings require a full-day slot',
     'One or more selected dates are no longer available',
     'This time overlaps another booking',
+    'Not enough rooms are available for this time',
     'This hotel is not currently accepting bookings',
     'Payment gateway authentication failed',
   ].includes(error.message) || error.message.startsWith('Selected guests require at least')
@@ -131,14 +132,17 @@ export async function POST(req: NextRequest) {
 
       const rangeStart = startDate ?? slot.date
       const rangeEnd = endDate ?? rangeStart
-      const dates = dateRangeStrings(rangeStart, rangeEnd)
+      const requestedSlotType = slotType ?? slot.slotType
+      const dates = requestedSlotType === 'FULLDAY'
+        ? fullDayStayDates(rangeStart, rangeEnd)
+        : dateRangeStrings(rangeStart, rangeEnd)
       if (dates.length === 0) throw new Error('Invalid booking date range')
       if (rangeStart < todayInIndia()) throw new Error('Past dates cannot be booked')
       if (slot.date !== rangeStart) throw new Error('Selected slot does not match the booking date')
       if (slotType && slot.slotType !== slotType) throw new Error('Selected slot type does not match the booking request')
       if (!roomAllowsSlotType(slot.room, slot.slotType)) throw new Error('This stay duration is disabled for this room')
       if (slotIsPastForBooking(slot.slotType, slot.date, slot.startTime)) throw new Error('This slot has already started')
-      if (dates.length > 1 && (slotType !== 'FULLDAY' || slot.slotType !== 'FULLDAY')) {
+      if (dates.length > 1 && (requestedSlotType !== 'FULLDAY' || slot.slotType !== 'FULLDAY')) {
         throw new Error('Multi-day bookings require a full-day slot')
       }
 
@@ -146,16 +150,17 @@ export async function POST(req: NextRequest) {
         where: { status: { in: ['PENDING', 'CONFIRMED'] }, roomSlot: { roomId: slot.roomId } },
         select: {
           totalHours: true,
+          roomCount: true,
           roomSlot: { select: { date: true, slotType: true, startTime: true, endTime: true } },
         },
       })
-      if (activeBookings.some(booking => bookingConflictsWithRequest(booking, {
+      if (!requestHasCapacity(activeBookings, {
         dates,
         slotType: slot.slotType,
         startTime: slot.startTime,
         endTime: slot.endTime,
-      }))) {
-        throw new Error('This time overlaps another booking')
+      }, slot.room.inventoryCount, roomCount)) {
+        throw new Error('Not enough rooms are available for this time')
       }
 
       if (dates.length > 1) {
@@ -173,13 +178,6 @@ export async function POST(req: NextRequest) {
           throw new Error('One or more selected dates are no longer available')
         }
       }
-
-      await tx.roomSlot.updateMany({
-        where: dates.length > 1
-          ? { roomId: slot.roomId, date: { in: dates }, slotType: 'FULLDAY', startTime: slot.startTime }
-          : { id: slotId },
-        data: { isBooked: true },
-      })
 
       const { checkIn, checkOut } = createBookingDateTimes({
         startDate: rangeStart,
