@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { getRazorpay } from '@/lib/razorpay'
 import { sendBookingCancellation } from '@/lib/email'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { PERMISSIONS } from '@/lib/rbac'
 import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-db'
 import { canCancelBooking } from '@/lib/booking-cancellation'
-import { moneyToNumber, rupeesToPaise } from '@/lib/money'
+import { moneyToNumber } from '@/lib/money'
+import { initiateRazorpayRefund, RazorpayRefundPersistenceError, recordPaymentEvent } from '@/lib/payments'
 
 const schema = z.object({
   reason: z.string().trim().min(5).max(500),
@@ -47,9 +47,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   let refundAmount: number | undefined
   let refundId = booking.payment?.providerRefundId ?? undefined
   const payment = booking.payment
+  let resultingPaymentStatus = payment?.status ?? 'PAY_AT_HOTEL'
 
   if (payment?.status === 'REFUND_PENDING') {
     return NextResponse.json({ error: 'A refund is already being processed. Verify it in Razorpay before retrying.' }, { status: 409 })
+  }
+  if (payment?.status === 'REFUND_FAILED') {
+    return NextResponse.json({ error: 'A previous refund failed. Resolve it in Razorpay before cancelling this booking.' }, { status: 409 })
   }
 
   if (payment?.status === 'SUCCESS') {
@@ -67,23 +71,45 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (claimed.count === 0) {
       return NextResponse.json({ error: 'The payment state changed. Refresh the booking before retrying.' }, { status: 409 })
     }
+    await prisma.paymentEvent.create({
+      data: { paymentId: payment.id, fromStatus: 'SUCCESS', toStatus: 'REFUND_PENDING', actorType: 'ADMIN', actorId: session!.user.id },
+    })
 
     try {
-      const refund = await getRazorpay().payments.refund(payment.providerPaymentId, {
-        amount: rupeesToPaise(payment.amount),
-        notes: { bookingId: booking.id, initiatedBy: session!.user.id },
+      const refund = await initiateRazorpayRefund({
+        bookingId: booking.id,
+        paymentRecordId: payment.id,
+        providerPaymentId: payment.providerPaymentId,
+        amount: payment.amount,
+        actorType: 'ADMIN',
+        actorId: session!.user.id,
       })
       refundId = refund.id
       refundAmount = moneyToNumber(payment.amount)
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'REFUNDED', providerRefundId: refund.id, refundedAt: new Date() },
-      })
+      resultingPaymentStatus = refund.status
+      if (refund.status === 'REFUND_FAILED') {
+        return NextResponse.json({ error: 'Razorpay could not process the refund. The booking remains active and needs support review.' }, { status: 502 })
+      }
     } catch (error) {
       console.error('Administrative refund failed:', error)
+      if (error instanceof RazorpayRefundPersistenceError) {
+        return NextResponse.json({
+          error: `Razorpay accepted refund ${error.refundId}, but WayStayy could not save the final state. Leave the booking active and reconcile this refund in Razorpay.`,
+        }, { status: 502 })
+      }
       await prisma.payment.updateMany({
         where: { id: payment.id, status: 'REFUND_PENDING' },
         data: { status: 'SUCCESS' },
+      })
+      await prisma.paymentEvent.create({
+        data: {
+          paymentId: payment.id,
+          fromStatus: 'REFUND_PENDING',
+          toStatus: 'SUCCESS',
+          actorType: 'ADMIN',
+          actorId: session!.user.id,
+          metadata: { error: error instanceof Error ? error.message : 'Unknown refund error' },
+        },
       })
       return NextResponse.json({ error: 'Razorpay did not confirm the refund. The booking remains active.' }, { status: 502 })
     }
@@ -107,6 +133,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
       if (payment?.status === 'PENDING') {
         await tx.payment.updateMany({ where: { id: payment.id, status: 'PENDING' }, data: { status: 'FAILED' } })
+        resultingPaymentStatus = 'FAILED'
+        await recordPaymentEvent(tx, {
+          paymentId: payment.id,
+          fromStatus: 'PENDING',
+          toStatus: 'FAILED',
+          actorType: 'ADMIN',
+          actorId: session!.user.id,
+        })
       }
 
       await releaseBookingSlots(tx, booking)
@@ -122,7 +156,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             before: { bookingStatus: booking.status, paymentStatus: payment?.status ?? 'PAY_AT_HOTEL' },
             after: {
               bookingStatus: 'CANCELLED',
-              paymentStatus: payment?.status === 'SUCCESS' || payment?.status === 'REFUNDED' ? 'REFUNDED' : payment?.status === 'PENDING' ? 'FAILED' : payment?.status ?? 'PAY_AT_HOTEL',
+              paymentStatus: resultingPaymentStatus,
               refundId: refundId ?? null,
               cancelledAt: cancelledAt.toISOString(),
             },

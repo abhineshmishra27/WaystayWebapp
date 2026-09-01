@@ -39,6 +39,7 @@ function paymentLabel(payment: ManagedBooking['payment']) {
   if (payment.status === 'SUCCESS') return 'Paid online'
   if (payment.status === 'REFUNDED') return 'Refunded'
   if (payment.status === 'REFUND_PENDING') return 'Refund pending'
+  if (payment.status === 'REFUND_FAILED') return 'Refund failed — needs attention'
   return `${payment.provider} · ${payment.status}`
 }
 
@@ -68,7 +69,7 @@ export default function BookingManagementTable({ initialBookings }: { initialBoo
           <option value="ALL">All booking statuses</option><option value="PENDING">Pending</option><option value="CONFIRMED">Confirmed</option><option value="COMPLETED">Completed</option><option value="CANCELLED">Cancelled</option>
         </select>
         <select value={payment} onChange={event => setPayment(event.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
-          <option value="ALL">All payment states</option><option value="PAY_AT_HOTEL">Pay at hotel</option><option value="PENDING">Payment pending</option><option value="SUCCESS">Paid online</option><option value="REFUND_PENDING">Refund pending</option><option value="REFUNDED">Refunded</option><option value="FAILED">Failed</option>
+          <option value="ALL">All payment states</option><option value="PAY_AT_HOTEL">Pay at hotel</option><option value="PENDING">Payment pending</option><option value="SUCCESS">Paid online</option><option value="REFUND_PENDING">Refund pending</option><option value="REFUNDED">Refunded</option><option value="REFUND_FAILED">Refund failed</option><option value="FAILED">Failed</option>
         </select>
       </div>
 

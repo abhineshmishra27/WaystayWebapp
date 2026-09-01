@@ -131,6 +131,41 @@ export async function sendReviewNudge(booking: ReviewNudgeData, hotelName: strin
   })
 }
 
+export interface RefundFailedAlertData {
+  bookingId: string
+  guestName: string
+  guestEmail: string
+  hotelName?: string
+  amount: MoneyValue
+  providerPaymentId?: string | null
+  providerRefundId?: string | null
+  reason?: string | null
+}
+
+export async function sendRefundFailedAdminAlert(data: RefundFailedAlertData) {
+  const adminEmail = process.env.PARTNER_ADMIN_EMAIL || 'waystayrooms@gmail.com'
+  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3017'
+  await sendEmail({
+    from: FROM,
+    to: adminEmail,
+    subject: `Refund failed — booking ${data.bookingId} needs manual follow-up`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;padding:24px;color:#0f172a">
+      <h1 style="font-size:22px;color:#dc2626">A refund failed at the bank</h1>
+      <p>Razorpay reported that a refund we marked as processed did not actually complete. The customer may believe they have been refunded. This needs manual verification in the Razorpay dashboard.</p>
+      <table style="width:100%;border-collapse:collapse;margin:20px 0">
+        <tr><td style="padding:8px;color:#64748b">Booking</td><td style="padding:8px;font-weight:600">${escapeHtml(data.bookingId)}</td></tr>
+        <tr style="background:#f8fafc"><td style="padding:8px;color:#64748b">Guest</td><td style="padding:8px">${escapeHtml(data.guestName)} · ${escapeHtml(data.guestEmail)}</td></tr>
+        ${data.hotelName ? `<tr><td style="padding:8px;color:#64748b">Hotel</td><td style="padding:8px">${escapeHtml(data.hotelName)}</td></tr>` : ''}
+        <tr style="background:#f8fafc"><td style="padding:8px;color:#64748b">Amount</td><td style="padding:8px;font-weight:600">₹${formatRupees(data.amount)}</td></tr>
+        <tr><td style="padding:8px;color:#64748b">Payment ID</td><td style="padding:8px;font-family:monospace">${escapeHtml(data.providerPaymentId || '—')}</td></tr>
+        <tr style="background:#f8fafc"><td style="padding:8px;color:#64748b">Refund ID</td><td style="padding:8px;font-family:monospace">${escapeHtml(data.providerRefundId || '—')}</td></tr>
+        ${data.reason ? `<tr><td style="padding:8px;color:#64748b">Reported reason</td><td style="padding:8px">${escapeHtml(data.reason)}</td></tr>` : ''}
+      </table>
+      <a href="${baseUrl}/admin/bookings/${data.bookingId}" style="display:inline-block;background:#dc2626;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Review booking</a>
+    </div>`,
+  })
+}
+
 export interface PartnerApplicationEmailData {
   id: string
   fullName: string

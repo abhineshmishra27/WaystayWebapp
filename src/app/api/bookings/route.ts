@@ -14,6 +14,7 @@ import { slotIsPastForBooking, todayInIndia } from '@/lib/booking-time'
 import { roomAllowsSlotType } from '@/lib/room-slot-settings'
 import { createBookingDateTimes } from '@/lib/booking-datetime'
 import { moneyToNumber, rupeesToPaise } from '@/lib/money'
+import { recordPaymentEvent } from '@/lib/payments'
 
 const createBookingSchema = z.object({
   slotId: z.string(),
@@ -250,7 +251,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Create pending payment record
-      await tx.payment.create({
+      const payment = await tx.payment.create({
         data: {
           bookingId: booking.id,
           amount: booking.totalAmount,
@@ -259,6 +260,15 @@ export async function POST(req: NextRequest) {
           providerOrderId: order.id,
           status: 'PENDING',
         },
+      })
+
+      await recordPaymentEvent(tx, {
+        paymentId: payment.id,
+        fromStatus: null,
+        toStatus: 'PENDING',
+        actorType: 'CUSTOMER',
+        actorId: session!.user.id,
+        providerEventId: order.id,
       })
 
       return { booking, razorpayOrderId: order.id }

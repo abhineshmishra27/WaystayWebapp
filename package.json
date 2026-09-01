@@ -15,7 +15,11 @@
     "test:booking-cancellation": "node --no-warnings --test tests/booking-cancellation.test.mts",
     "test:location-search": "node --no-warnings --test tests/location-search.test.mts",
     "test:money": "node --no-warnings --test tests/money.test.mts",
+    "test:payments": "node --no-warnings --test tests/razorpay-status.test.mts",
     "test:partner-rbac": "node --no-warnings --test tests/partner-rbac.test.mts",
+    "payment:check-config": "node scripts/check-payment-config.js",
+    "payment:check-config:production": "node scripts/check-payment-config.js --production",
+    "payment:check-connection": "node scripts/check-razorpay-connection.js",
     "rbac:ensure-primary-admin": "node scripts/ensure-primary-admin.js"
   },
   "dependencies": {

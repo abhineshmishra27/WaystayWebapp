@@ -293,13 +293,27 @@ RAZORPAY_WEBHOOK_SECRET="..."
 
 `RAZORPAY_KEY_ID` and `NEXT_PUBLIC_RAZORPAY_KEY_ID` must contain the same key ID. Never expose `RAZORPAY_KEY_SECRET` or `RAZORPAY_WEBHOOK_SECRET` through a `NEXT_PUBLIC_` variable.
 
+In the Razorpay Dashboard:
+
+1. Enable automatic capture for authorised payments.
+2. Open **Account & Settings → Payment Methods** and enable every method WayStayy should offer. Standard Checkout automatically displays the methods enabled for the merchant and supported for that customer, including debit/credit cards, UPI, netbanking, wallets, EMI, Cardless EMI and Pay Later where approved.
+3. Use the UPI Intent/QR flow. On mobile, Checkout opens a supported UPI app; on desktop, it displays a UPI QR for the customer to scan. The separate Razorpay QR Codes API is not needed for a hotel booking checkout.
+
 Create a Razorpay webhook pointing to:
 
 ```text
 https://YOUR_DOMAIN/api/payments/webhook
 ```
 
-Subscribe it to `payment.captured`, `payment.failed`, and `order.paid`, and use the same webhook secret in the dashboard and `RAZORPAY_WEBHOOK_SECRET`. Test mode keys begin with `rzp_test_`; live keys begin with `rzp_live_`.
+Subscribe it to `payment.captured`, `payment.failed`, `order.paid`, `refund.processed`, and `refund.failed`, and use the same webhook secret in the dashboard and `RAZORPAY_WEBHOOK_SECRET`. Test mode keys begin with `rzp_test_`; live keys begin with `rzp_live_`.
+
+Apply the payment migrations before testing:
+
+```bash
+npx prisma migrate deploy
+```
+
+Set `CRON_SECRET` in the hosting environment so `/api/cron/expire-stale-payments` can safely reconcile old pending orders before releasing their inventory. The job confirms captured payments, retains authorised payments and expires only orders with no captured or authorised attempt.
 
 ### Google Sign-In Setup
 

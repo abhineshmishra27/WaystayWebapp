@@ -22,6 +22,7 @@ interface RazorpayOptions {
   prefill: { name: string; email: string; contact: string }
   notes: Record<string, string>
   theme: { color: string }
+  retry: { enabled: boolean; max_count: number }
   modal: { ondismiss: () => void }
 }
 
@@ -83,22 +84,6 @@ function PaymentDetails() {
   const isMissingBooking = !slotId || !startDate || !slotType || !price || !guestName || !guestEmail || !guestPhone
   const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || ''
   const isGatewayConfigured = razorpayKey.startsWith('rzp_')
-
-  const releasePendingBooking = async (
-    bookingId: string,
-    razorpayOrderId: string,
-    razorpayPaymentId?: string
-  ) => {
-    try {
-      await fetch('/api/payments/cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId, razorpayOrderId, razorpayPaymentId }),
-      })
-    } catch (error) {
-      console.error('Unable to release pending booking:', error)
-    }
-  }
 
   useEffect(() => {
     if (window.Razorpay) {
@@ -206,11 +191,9 @@ function PaymentDetails() {
           hotelId,
         },
         theme: { color: '#4f46e5' },
+        retry: { enabled: true, max_count: 3 },
         modal: {
           ondismiss: () => {
-            if (!paymentCallbackStarted.current) {
-              void releasePendingBooking(bookingData.bookingId, bookingData.razorpayOrderId)
-            }
             setOnlineLoading(false)
             if (!paymentCallbackStarted.current) toast.error('Payment was not completed')
           },
@@ -239,14 +222,8 @@ function PaymentDetails() {
       })
 
       checkout.on('payment.failed', (response) => {
-        paymentCallbackStarted.current = true
-        void releasePendingBooking(
-          bookingData.bookingId,
-          bookingData.razorpayOrderId,
-          response.error?.metadata?.payment_id
-        )
-        setOnlineLoading(false)
-        toast.error(response.error?.description || 'Payment failed. Please try another method.')
+        paymentCallbackStarted.current = false
+        toast.error(response.error?.description || 'That attempt failed. Retry or choose another payment method.')
       })
       checkout.open()
     } catch (error) {
@@ -287,38 +264,47 @@ function PaymentDetails() {
           <div className="mt-6 space-y-3">
             <button
               type="button"
-              onClick={handlePayAtHotel}
-              disabled={loading || isMissingBooking}
+              onClick={handlePayOnline}
+              disabled={onlineLoading || loading || isMissingBooking || !checkoutReady || !isGatewayConfigured}
               className="group w-full rounded-xl border border-indigo-600 bg-indigo-600 px-5 py-4 text-left text-white shadow-sm transition-all hover:bg-indigo-700 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span className="flex items-center justify-between gap-3">
                 <span>
-                  <span className="block text-base font-semibold">{loading ? 'Confirming booking...' : 'Pay at Hotel'}</span>
-                  <span className="block text-sm text-indigo-100 mt-1">Reserve now and pay directly at the property.</span>
+                  <span className="block text-base font-semibold">{onlineLoading ? 'Opening secure checkout...' : 'Pay Online'}</span>
+                  <span className="block text-sm text-indigo-100 mt-1">
+                    {isGatewayConfigured ? 'Cards, UPI apps or QR, netbanking, wallets and eligible EMI options.' : 'Add Razorpay test keys to enable online payment.'}
+                  </span>
                 </span>
-                <span className="rounded-full bg-white/15 px-3 py-1 text-sm font-semibold">₹{price}</span>
+                <span className="rounded-full bg-white/15 px-3 py-1 text-sm font-semibold">
+                  {isGatewayConfigured ? `₹${price}` : 'Setup needed'}
+                </span>
               </span>
             </button>
 
             <button
               type="button"
-              onClick={handlePayOnline}
-              disabled={onlineLoading || loading || isMissingBooking || !checkoutReady || !isGatewayConfigured}
+              onClick={handlePayAtHotel}
+              disabled={loading || isMissingBooking}
               className="w-full rounded-xl border border-gray-200 bg-white px-5 py-4 text-left shadow-sm transition-all hover:border-indigo-200 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="flex items-center justify-between gap-3">
                 <span>
-                  <span className="block text-base font-semibold text-gray-800">{onlineLoading ? 'Opening secure checkout...' : 'Pay Online'}</span>
-                  <span className="block text-sm text-gray-400 mt-1">
-                    {isGatewayConfigured ? 'Pay securely using Razorpay checkout.' : 'Add Razorpay test keys to enable online payment.'}
-                  </span>
+                  <span className="block text-base font-semibold text-gray-800">{loading ? 'Confirming booking...' : 'Pay at Hotel'}</span>
+                  <span className="block text-sm text-gray-400 mt-1">Reserve now and pay directly at the property.</span>
                 </span>
-                <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-700">
-                  {isGatewayConfigured ? `₹${price}` : 'Setup needed'}
-                </span>
+                <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-700">₹{price}</span>
               </span>
             </button>
           </div>
+
+          {isGatewayConfigured ? (
+            <div className="mt-5 rounded-xl bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+              <p className="font-semibold">Secure payment options</p>
+              <p className="mt-1 text-indigo-700">
+                Razorpay shows every method enabled for WayStayy. Desktop UPI displays a scannable QR; mobile UPI opens supported payment apps.
+              </p>
+            </div>
+          ) : null}
 
           <div className="mt-6">
             <Link
