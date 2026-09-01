@@ -85,6 +85,36 @@ function PaymentDetails() {
   const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || ''
   const isGatewayConfigured = razorpayKey.startsWith('rzp_')
 
+  const releasePendingBooking = async (bookingId: string, razorpayOrderId: string) => {
+    try {
+      const response = await fetch('/api/payments/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, razorpayOrderId }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to release the room')
+      }
+
+      if (data.confirmed) {
+        router.push(`/booking/success?bookingId=${encodeURIComponent(bookingId)}&paymentMethod=online`)
+        return
+      }
+
+      if (data.released) {
+        toast.error('Payment cancelled. The room has been released.')
+        return
+      }
+
+      toast.error('Payment was not completed')
+    } catch (error) {
+      console.error('Unable to release pending booking:', error)
+      toast.error(error instanceof Error ? error.message : 'Unable to release the room. Please try again shortly.')
+    }
+  }
+
   useEffect(() => {
     if (window.Razorpay) {
       return
@@ -194,8 +224,13 @@ function PaymentDetails() {
         retry: { enabled: true, max_count: 3 },
         modal: {
           ondismiss: () => {
+            if (!paymentCallbackStarted.current) {
+              paymentCallbackStarted.current = true
+              void releasePendingBooking(bookingData.bookingId, bookingData.razorpayOrderId)
+                .finally(() => setOnlineLoading(false))
+              return
+            }
             setOnlineLoading(false)
-            if (!paymentCallbackStarted.current) toast.error('Payment was not completed')
           },
         },
         handler: async (response) => {
