@@ -1,12 +1,10 @@
-require('dotenv').config()
 const { PrismaClient } = require('@prisma/client')
 const { PrismaPg } = require('@prisma/adapter-pg')
 const bcrypt = require('bcryptjs')
+const { resolveDatabaseUrl } = require('./database-url')
 
 const prisma = new PrismaClient({
-  adapter: new PrismaPg({
-    connectionString: (process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? '').replace(/(^\"|\"$)/g, ''),
-  }),
+  adapter: new PrismaPg({ connectionString: resolveDatabaseUrl() }),
 })
 
 async function upsertUser(email, name, password, role) {

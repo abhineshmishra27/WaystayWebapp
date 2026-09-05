@@ -1,12 +1,10 @@
-require('dotenv').config()
 const { PrismaClient } = require('@prisma/client')
 const { PrismaPg } = require('@prisma/adapter-pg')
+const { resolveDatabaseUrl } = require('./database-url')
 
 async function main() {
   const prisma = new PrismaClient({
-    adapter: new PrismaPg({
-      connectionString: (process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? '').replace(/(^\"|\"$)/g, ''),
-    }),
+    adapter: new PrismaPg({ connectionString: resolveDatabaseUrl() }),
   })
   try {
     const users = await prisma.user.findMany({ select: { id: true, email: true, name: true, role: true }, take: 50 })

@@ -1,18 +1,10 @@
-require('dotenv').config({ path: '.env.local' })
-require('dotenv').config()
-
 const bcrypt = require('bcryptjs')
 const { PrismaClient } = require('@prisma/client')
 const { PrismaPg } = require('@prisma/adapter-pg')
+const { resolveDatabaseUrl } = require('./database-url')
 
 const prisma = new PrismaClient({
-  adapter: new PrismaPg({
-    connectionString: (
-      process.env.WAYSTAY_DATABASE_URL ||
-      process.env.DATABASE_URL ||
-      ''
-    ).replace(/(^"|"$)/g, ''),
-  }),
+  adapter: new PrismaPg({ connectionString: resolveDatabaseUrl() }),
 })
 
 const cities = [
@@ -72,10 +64,7 @@ async function ensureSlots(roomId, days = 45) {
 }
 
 async function main() {
-  if (!process.env.WAYSTAY_DATABASE_URL && !process.env.DATABASE_URL) {
-    throw new Error('WAYSTAY_DATABASE_URL or DATABASE_URL is required')
-  }
-
+  // resolveDatabaseUrl() already threw at import time if nothing is configured.
   const passwordHash = await bcrypt.hash('Owner@123', 12)
   let seededHotels = 0
 

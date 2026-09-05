@@ -1,21 +1,10 @@
-require('dotenv').config({ path: '.env.local' })
-require('dotenv').config()
-
 const { PrismaClient } = require('@prisma/client')
 const { PrismaPg } = require('@prisma/adapter-pg')
+const { resolveDatabaseUrl } = require('./database-url')
 
 const PRIMARY_ADMIN_EMAIL = 'waystayrooms@gmail.com'
-const connectionString = (
-  process.env.WAYSTAY_DATABASE_URL_UNPOOLED ??
-  process.env.WAYSTAY_DATABASE_URL ??
-  process.env.DIRECT_URL ??
-  process.env.DATABASE_URL ??
-  ''
-).replace(/(^"|"$)/g, '')
 
-if (!connectionString) throw new Error('Database connection string is not configured.')
-
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) })
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: resolveDatabaseUrl() }) })
 
 async function main() {
   const existing = await prisma.user.findFirst({
