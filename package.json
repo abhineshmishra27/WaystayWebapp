@@ -18,6 +18,8 @@
     "test:payments": "node --no-warnings --test tests/razorpay-status.test.mts",
     "test:partner-rbac": "node --no-warnings --test tests/partner-rbac.test.mts",
     "test:channel-holds": "node --no-warnings --test tests/channel-holds.test.mts",
+    "test:channel-mapping": "node --no-warnings --test tests/channel-mapping.test.mts",
+    "test:channel-crypto": "node --no-warnings --conditions=react-server --test tests/channel-crypto.test.mts",
     "payment:check-config": "node scripts/check-payment-config.js",
     "payment:check-config:production": "node scripts/check-payment-config.js --production",
     "payment:check-connection": "node scripts/check-razorpay-connection.js",
@@ -51,6 +53,7 @@
     "eslint": "^9",
     "eslint-config-next": "^16.3.0",
     "prisma": "^7.10.0",
+    "server-only": "^0.0.1",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "typescript": "^5"
