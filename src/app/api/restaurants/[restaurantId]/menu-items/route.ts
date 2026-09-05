@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { z } from 'zod'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const itemSchema = z.object({
   category: z.string().min(2),
@@ -22,7 +23,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ rest
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
     })
     return NextResponse.json(items)
-  } catch {
+  } catch (error) {
+    logger.error('api.restaurants.menu-items.failed_to_fetch_menu_items', error)
     return NextResponse.json({ error: 'Failed to fetch menu items' }, { status: 500 })
   }
 }
@@ -45,7 +47,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ res
 
     const item = await prisma.menuItem.create({ data: { ...parsed.data, restaurantId } })
     return NextResponse.json(item, { status: 201 })
-  } catch {
+  } catch (error) {
+    logger.error('api.restaurants.menu-items.failed_to_create_menu_item', error)
     return NextResponse.json({ error: 'Failed to create menu item' }, { status: 500 })
   }
 }

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
 import { z } from 'zod'
+import { logger } from '@/lib/logger'
 
 const updateHotelSchema = z.object({
   name: z.string().min(3).optional(),
@@ -69,7 +70,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       : 0
 
     return NextResponse.json({ ...hotel, avgRating })
-  } catch {
+  } catch (error) {
+    logger.error('api.hotels.failed_to_fetch_hotel', error)
     return NextResponse.json({ error: 'Failed to fetch hotel' }, { status: 500 })
   }
 }
@@ -98,7 +100,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const updated = await prisma.hotel.update({ where: { id }, data: parsed.data })
 
     return NextResponse.json(updated)
-  } catch {
+  } catch (error) {
+    logger.error('api.hotels.failed_to_update_hotel', error)
     return NextResponse.json({ error: 'Failed to update hotel' }, { status: 500 })
   }
 }
@@ -119,7 +122,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       prisma.auditLog.create({ data: { adminId: session!.user.id, action: 'HOTEL_SUSPENDED', targetType: 'Hotel', targetId: id, hotelId: id, metadata: { before: { isActive: true }, after: { isActive: false }, reason: parsed.data.reason } } }),
     ])
     return NextResponse.json({ message: 'Hotel deactivated' })
-  } catch {
+  } catch (error) {
+    logger.error('api.hotels.failed_to_deactivate_hotel', error)
     return NextResponse.json({ error: 'Failed to deactivate hotel' }, { status: 500 })
   }
 }

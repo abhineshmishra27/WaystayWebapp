@@ -5,6 +5,7 @@ import { dateRangeStrings, slotIsUnavailable } from '@/lib/booking-inventory'
 import { loadChannelHoldsForRoom } from '@/lib/booking-inventory-db'
 import { slotIsPastForBooking, todayInIndia } from '@/lib/booking-time'
 import { roomAllowsSlotType } from '@/lib/room-slot-settings'
+import { logger } from '@/lib/logger'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
   try {
@@ -95,7 +96,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
     )
 
     return NextResponse.json({ roomId, availability })
-  } catch {
+  } catch (error) {
+    logger.error('api.rooms.availability.failed_to_fetch_availability', error)
     return NextResponse.json({ error: 'Failed to fetch availability' }, { status: 500 })
   }
 }

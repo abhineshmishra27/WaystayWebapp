@@ -15,6 +15,7 @@ import { roomAllowsSlotType } from '@/lib/room-slot-settings'
 import { createBookingDateTimes } from '@/lib/booking-datetime'
 import { moneyToNumber, rupeesToPaise } from '@/lib/money'
 import { recordPaymentEvent } from '@/lib/payments'
+import { logger } from '@/lib/logger'
 
 const createBookingSchema = z.object({
   slotId: z.string(),
@@ -98,7 +99,8 @@ export async function GET(req: NextRequest) {
         additionalAmount: moneyToNumber(extension.additionalAmount),
       })),
     })))
-  } catch {
+  } catch (error) {
+    logger.error('api.bookings.failed_to_fetch_bookings', error)
     return NextResponse.json({ error: 'Failed to fetch bookings' }, { status: 500 })
   }
 }

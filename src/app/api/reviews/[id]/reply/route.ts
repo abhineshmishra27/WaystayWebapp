@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { z } from 'zod'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const schema = z.object({ reply: z.string().min(10).max(500) })
 
@@ -38,7 +39,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     })
 
     return NextResponse.json(updated)
-  } catch {
+  } catch (error) {
+    logger.error('api.reviews.reply.failed_to_submit_reply', error)
     return NextResponse.json({ error: 'Failed to submit reply' }, { status: 500 })
   }
 }

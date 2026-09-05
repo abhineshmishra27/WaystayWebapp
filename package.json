@@ -24,7 +24,8 @@
     "payment:check-config:production": "node scripts/check-payment-config.js --production",
     "payment:check-connection": "node scripts/check-razorpay-connection.js",
     "rbac:ensure-primary-admin": "node scripts/ensure-primary-admin.js",
-    "test:channel-adapter": "node --no-warnings --conditions=react-server --import ./tests/support/alias-hook.mjs --test tests/channel-adapter.test.mts"
+    "test:channel-adapter": "node --no-warnings --conditions=react-server --import ./tests/support/alias-hook.mjs --test tests/channel-adapter.test.mts",
+    "test:logger": "node --no-warnings --test tests/logger.test.mts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

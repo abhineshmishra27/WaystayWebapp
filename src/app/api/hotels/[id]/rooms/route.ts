@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { z } from 'zod'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const roomSchema = z.object({
   name: z.string().min(3),
@@ -35,7 +36,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       include: { _count: { select: { slots: { where: { isBooked: false } } } } },
     })
     return NextResponse.json(rooms)
-  } catch {
+  } catch (error) {
+    logger.error('api.hotels.rooms.failed_to_fetch_rooms', error)
     return NextResponse.json({ error: 'Failed to fetch rooms' }, { status: 500 })
   }
 }
@@ -89,7 +91,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     const room = await prisma.room.create({ data })
     return NextResponse.json(room, { status: 201 })
-  } catch {
+  } catch (error) {
+    logger.error('api.hotels.rooms.failed_to_create_room', error)
     return NextResponse.json({ error: 'Failed to create room' }, { status: 500 })
   }
 }
