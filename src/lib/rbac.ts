@@ -21,6 +21,9 @@ export const PERMISSIONS = {
   REVIEW_MODERATE: 'review:moderate',
   AUDIT_VIEW: 'audit:view',
   PARTNER_APPLICATION_MANAGE: 'partner-application:manage',
+  /// Connecting/disconnecting channel managers and triggering syncs. Distinct from
+  /// PARTNER_APPLICATION_MANAGE, which governs hotel-owner applications.
+  CHANNEL_MANAGE: 'channel:manage',
 } as const
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -54,6 +57,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     PERMISSIONS.REVIEW_MODERATE,
     PERMISSIONS.AUDIT_VIEW,
     PERMISSIONS.PARTNER_APPLICATION_MANAGE,
+    PERMISSIONS.CHANNEL_MANAGE,
   ],
 }
 

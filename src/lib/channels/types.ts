@@ -100,16 +100,19 @@ export type ChannelWebhookEvent = {
   occurredAt: Date | null
 }
 
+// Fields are declared explicitly rather than as constructor parameter properties:
+// the test runner strips types without transforming, and parameter properties are
+// not supported in that mode.
 export class ChannelApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number | null,
-    /** Whether retrying the same call could plausibly succeed. */
-    readonly retryable: boolean,
-    options?: { cause?: unknown },
-  ) {
+  readonly status: number | null
+  /** Whether retrying the same call could plausibly succeed. */
+  readonly retryable: boolean
+
+  constructor(message: string, status: number | null, retryable: boolean, options?: { cause?: unknown }) {
     super(message, options)
     this.name = 'ChannelApiError'
+    this.status = status
+    this.retryable = retryable
   }
 }
 
