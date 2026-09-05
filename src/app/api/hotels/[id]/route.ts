@@ -69,7 +69,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       ? hotel.reviews.reduce((sum, r) => sum + r.rating, 0) / hotel.reviews.length
       : 0
 
-    return NextResponse.json({ ...hotel, avgRating })
+    // Expose the consequence, not the plumbing: callers need to know the property
+    // cannot be booked pay-at-hotel, not which internal connection it came from.
+    const { channelConnectionId, ...publicHotel } = hotel
+    return NextResponse.json({
+      ...publicHotel,
+      avgRating,
+      requiresPrepayment: Boolean(channelConnectionId),
+    })
   } catch (error) {
     logger.error('api.hotels.failed_to_fetch_hotel', error)
     return NextResponse.json({ error: 'Failed to fetch hotel' }, { status: 500 })

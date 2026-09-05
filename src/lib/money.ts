@@ -1,3 +1,14 @@
+/**
+ * The only currency WayStay can price, charge and settle in today.
+ *
+ * Amounts are plain numbers with no currency attached, `rupeesToPaise` assumes a
+ * 100-subunit currency, and Razorpay is configured for one account, so this is a real
+ * constraint rather than a default. It is named and exported so the assumption is
+ * visible and checkable - it used to be a string literal repeated at each call site,
+ * which is how a foreign-currency property could have been charged in rupees.
+ */
+export const PLATFORM_CURRENCY = 'INR'
+
 export type MoneyValue = number | string | { toString(): string }
 
 function decimalParts(value: MoneyValue) {

@@ -13,7 +13,7 @@ import { loadChannelHoldsForRoom, lockRoomInventory } from '@/lib/booking-invent
 import { slotIsPastForBooking, todayInIndia } from '@/lib/booking-time'
 import { roomAllowsSlotType } from '@/lib/room-slot-settings'
 import { createBookingDateTimes } from '@/lib/booking-datetime'
-import { moneyToNumber, rupeesToPaise } from '@/lib/money'
+import { moneyToNumber, PLATFORM_CURRENCY, rupeesToPaise } from '@/lib/money'
 import { recordPaymentEvent } from '@/lib/payments'
 import { logger } from '@/lib/logger'
 
@@ -33,6 +33,15 @@ const createBookingSchema = z.object({
 
 /** Shared so the throw site and the status mapping cannot drift apart. */
 const CHANNEL_PREPAYMENT_REQUIRED = 'This property requires online payment to confirm the booking'
+const CHANNEL_CURRENCY_MISMATCH = 'This property is not currently bookable on WayStay'
+
+/**
+ * How long an identical request is treated as a repeat of the first one rather than a
+ * new booking. Long enough to absorb a double-click, an impatient retry or a flaky
+ * connection; short enough that someone deliberately booking the same room twice is
+ * only briefly inconvenienced.
+ */
+const DUPLICATE_SUBMIT_WINDOW_MS = 2 * 60 * 1000
 
 function isRazorpayConfigured() {
   return Boolean(
@@ -58,6 +67,7 @@ function isBookingConflict(error: Error) {
     'This hotel is not currently accepting bookings',
     'Payment gateway authentication failed',
     CHANNEL_PREPAYMENT_REQUIRED,
+    CHANNEL_CURRENCY_MISMATCH,
   ].includes(error.message) || error.message.startsWith('Selected guests require at least')
 }
 
@@ -69,6 +79,7 @@ function isBookingConflict(error: Error) {
 const BOOKING_ERROR_STATUSES: Record<string, number> = {
   'Payment gateway authentication failed': 503,
   [CHANNEL_PREPAYMENT_REQUIRED]: 400,
+  [CHANNEL_CURRENCY_MISMATCH]: 409,
 }
 
 export async function GET(req: NextRequest) {
@@ -147,7 +158,16 @@ export async function POST(req: NextRequest) {
 
     const result = await prisma.$transaction(async (tx) => {
       // Lock the slot
-      const slot = await tx.roomSlot.findUnique({ where: { id: slotId }, include: { room: { include: { hotel: true } } } })
+      const slot = await tx.roomSlot.findUnique({
+        where: { id: slotId },
+        include: {
+          room: {
+            include: {
+              hotel: { include: { channelConnection: { select: { currency: true } } } },
+            },
+          },
+        },
+      })
       if (!slot) throw new Error('Slot not found')
       if (!slot.room.hotel.isApproved || !slot.room.hotel.isActive || !slot.room.hotel.ownerEnabled) {
         throw new Error('This hotel is not currently accepting bookings')
@@ -159,7 +179,51 @@ export async function POST(req: NextRequest) {
       if (paymentMethod === 'PAY_AT_HOTEL' && slot.room.hotel.channelConnectionId) {
         throw new Error(CHANNEL_PREPAYMENT_REQUIRED)
       }
+      // Every amount below is a bare number and Razorpay is configured for one
+      // currency, so a property that prices in anything else would be charged its
+      // number of rupees. Import already refuses non-INR properties; this makes the
+      // assumption impossible to break later by a route that skips that check.
+      const connectionCurrency = slot.room.hotel.channelConnection?.currency
+      if (connectionCurrency && connectionCurrency !== PLATFORM_CURRENCY) {
+        logger.error('api.bookings.channel_currency_mismatch', undefined, {
+          hotelId: slot.room.hotel.id,
+          connectionCurrency,
+          platformCurrency: PLATFORM_CURRENCY,
+        })
+        throw new Error(CHANNEL_CURRENCY_MISMATCH)
+      }
       await lockRoomInventory(tx, slot.roomId)
+
+      // Double-submit guard. A double-click, an impatient retry or a dropped response
+      // otherwise produces a second booking and a second payment order for the same
+      // stay. Inventory was never at risk - the advisory lock above and the capacity
+      // check below see to that - but the duplicate row and orphan order are real.
+      // Safe to check-then-create because the lock serialises every writer per room.
+      const duplicate = await tx.booking.findFirst({
+        where: {
+          customerId: session!.user.id,
+          roomSlotId: slotId,
+          guestEmail,
+          roomCount,
+          guestCount,
+          status: { in: ['PENDING', 'CONFIRMED'] },
+          createdAt: { gt: new Date(Date.now() - DUPLICATE_SUBMIT_WINDOW_MS) },
+        },
+        include: { payment: { select: { providerOrderId: true } } },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (duplicate) {
+        logger.info('api.bookings.duplicate_submit_ignored', {
+          bookingId: duplicate.id,
+          customerId: session!.user.id,
+          slotId,
+        })
+        // Return the original rather than an error: from the caller's point of view the
+        // request succeeded, and handing back the same order id lets an interrupted
+        // checkout resume instead of stranding a paid-for-nothing order.
+        const { payment, ...bookingOnly } = duplicate
+        return { booking: bookingOnly, razorpayOrderId: payment?.providerOrderId ?? null, duplicate: true }
+      }
       const maxGuestsPerRoom = Math.max(1, Math.min(slot.room.maxOccupancy, 3))
       const requiredRooms = Math.ceil(guestCount / maxGuestsPerRoom)
       if (roomCount < requiredRooms) {
@@ -258,7 +322,7 @@ export async function POST(req: NextRequest) {
       })
 
       if (paymentMethod === 'PAY_AT_HOTEL') {
-        return { booking, razorpayOrderId: null }
+        return { booking, razorpayOrderId: null, duplicate: false }
       }
 
       // Create Razorpay order
@@ -267,7 +331,7 @@ export async function POST(req: NextRequest) {
         const razorpay = getRazorpay()
         order = await razorpay.orders.create({
           amount: rupeesToPaise(booking.totalAmount),
-          currency: 'INR',
+          currency: PLATFORM_CURRENCY,
           receipt: booking.id.slice(-20),
           notes: {
             bookingId: booking.id,
@@ -284,7 +348,7 @@ export async function POST(req: NextRequest) {
         data: {
           bookingId: booking.id,
           amount: booking.totalAmount,
-          currency: 'INR',
+          currency: PLATFORM_CURRENCY,
           provider: 'RAZORPAY',
           providerOrderId: order.id,
           status: 'PENDING',
@@ -300,25 +364,29 @@ export async function POST(req: NextRequest) {
         providerEventId: order.id,
       })
 
-      return { booking, razorpayOrderId: order.id }
+      return { booking, razorpayOrderId: order.id, duplicate: false }
     })
 
     if (!result.razorpayOrderId) {
-      try {
-        const booking = await prisma.booking.findUnique({
-          where: { id: result.booking.id },
-          include: { roomSlot: { include: { room: { include: { hotel: true } } } } },
-        })
-        if (booking) await sendBookingConfirmation(booking)
-      } catch (emailErr) {
-        console.error('Email error (non-blocking):', emailErr)
+      // A replayed submit must not send a second confirmation email for a stay the
+      // guest has already been told about.
+      if (!result.duplicate) {
+        try {
+          const booking = await prisma.booking.findUnique({
+            where: { id: result.booking.id },
+            include: { roomSlot: { include: { room: { include: { hotel: true } } } } },
+          })
+          if (booking) await sendBookingConfirmation(booking)
+        } catch (emailErr) {
+          logger.error('api.bookings.confirmation_email_failed', emailErr, { bookingId: result.booking.id })
+        }
       }
 
       return NextResponse.json({
         bookingId: result.booking.id,
         paymentMethod: 'PAY_AT_HOTEL',
         amount: rupeesToPaise(result.booking.totalAmount),
-        currency: 'INR',
+        currency: PLATFORM_CURRENCY,
       }, { status: 201 })
     }
 
@@ -326,7 +394,7 @@ export async function POST(req: NextRequest) {
       bookingId: result.booking.id,
       razorpayOrderId: result.razorpayOrderId,
       amount: rupeesToPaise(result.booking.totalAmount),
-      currency: 'INR',
+      currency: PLATFORM_CURRENCY,
     }, { status: 201 })
   } catch (err) {
     console.error('Create booking error:', err)
