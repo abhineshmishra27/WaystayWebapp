@@ -31,6 +31,9 @@ const createBookingSchema = z.object({
   paymentMethod: z.enum(['RAZORPAY', 'PAY_AT_HOTEL']).default('RAZORPAY'),
 })
 
+/** Shared so the throw site and the status mapping cannot drift apart. */
+const CHANNEL_PREPAYMENT_REQUIRED = 'This property requires online payment to confirm the booking'
+
 function isRazorpayConfigured() {
   return Boolean(
     process.env.RAZORPAY_KEY_ID?.startsWith('rzp_') &&
@@ -54,7 +57,18 @@ function isBookingConflict(error: Error) {
     'Not enough rooms are available for this time',
     'This hotel is not currently accepting bookings',
     'Payment gateway authentication failed',
+    CHANNEL_PREPAYMENT_REQUIRED,
   ].includes(error.message) || error.message.startsWith('Selected guests require at least')
+}
+
+/**
+ * Rejections that are not a 409. Anything absent defaults to Conflict, which suits the
+ * inventory races that make up most of this list but not a request that was simply
+ * asking for something this property does not offer.
+ */
+const BOOKING_ERROR_STATUSES: Record<string, number> = {
+  'Payment gateway authentication failed': 503,
+  [CHANNEL_PREPAYMENT_REQUIRED]: 400,
 }
 
 export async function GET(req: NextRequest) {
@@ -143,7 +157,7 @@ export async function POST(req: NextRequest) {
       // partner's room on a promise, and if the push to the channel then fails we have
       // sold a room we do not control. Channel stays must be paid up front.
       if (paymentMethod === 'PAY_AT_HOTEL' && slot.room.hotel.channelConnectionId) {
-        throw new Error('This property requires online payment to confirm the booking')
+        throw new Error(CHANNEL_PREPAYMENT_REQUIRED)
       }
       await lockRoomInventory(tx, slot.roomId)
       const maxGuestsPerRoom = Math.max(1, Math.min(slot.room.maxOccupancy, 3))
@@ -319,7 +333,7 @@ export async function POST(req: NextRequest) {
     if (err instanceof Error && isBookingConflict(err)) {
       return NextResponse.json(
         { error: err.message },
-        { status: err.message === 'Payment gateway authentication failed' ? 503 : 409 }
+        { status: BOOKING_ERROR_STATUSES[err.message] ?? 409 }
       )
     }
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 })
