@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { fullDayStayDates, slotIsUnavailable } from '@/lib/booking-inventory'
+import { dateRangeStrings, fullDayStayDates, slotIsUnavailable } from '@/lib/booking-inventory'
+import { loadChannelHolds } from '@/lib/booking-inventory-db'
 import { slotIsPastForBooking } from '@/lib/booking-time'
 import { descendantLocationIds, locationRadiusPlan } from '@/lib/location-search'
 import { roomAllowsSlotType, type CustomerSlotType, type RoomSlotSettings } from '@/lib/room-slot-settings'
@@ -232,7 +233,11 @@ export async function GET(req: NextRequest) {
       const now = new Date()
       const roomIds = filteredHotels.flatMap(hotel => hotel.rooms.map(room => room.id))
       const requestedDates = slotType === 'FULLDAY' ? fullDayStayDates(startDate, endDate) : [startDate]
-      const [matchingSlots, activeBookings] = roomIds.length > 0
+      // One day past the range so overnight hourly slots still see the next day's holds.
+      const holdRangeEnd = new Date(
+        Date.parse(`${slotType === 'FULLDAY' ? endDate : startDate}T00:00:00Z`) + 86_400_000,
+      ).toISOString().slice(0, 10)
+      const [matchingSlots, activeBookings, channelHoldsByRoomId] = roomIds.length > 0
         ? await Promise.all([
             prisma.roomSlot.findMany({
               where: {
@@ -253,8 +258,9 @@ export async function GET(req: NextRequest) {
                 roomSlot: { select: { roomId: true, date: true, slotType: true, startTime: true, endTime: true } },
               },
             }),
+            loadChannelHolds(prisma, roomIds, dateRangeStrings(startDate, holdRangeEnd)),
           ])
-        : [[], []]
+        : [[], [], new Map()]
 
       const slotsByRoomId = new Map<string, typeof matchingSlots>()
       for (const candidate of matchingSlots) {
@@ -289,6 +295,7 @@ export async function GET(req: NextRequest) {
               slotType === 'FULLDAY' ? endDate : candidate.date,
               room.inventoryCount,
               roomCount,
+              channelHoldsByRoomId.get(room.id) ?? [],
             )
           })
         })

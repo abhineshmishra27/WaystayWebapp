@@ -18,6 +18,16 @@ export type RequestedWindow = {
   endTime: string
 }
 
+/**
+ * Inventory a channel partner has sold outside WayStay. Held units are unavailable
+ * to us for the whole of `date`, so they reduce the room's effective inventory
+ * rather than marking any individual RoomSlot as booked.
+ */
+export type InventoryHold = {
+  date: string
+  unitsHeld: number
+}
+
 const DAY_MS = 86_400_000
 
 export function dateRangeStrings(startDate: string, endDate: string) {
@@ -140,15 +150,53 @@ export function maximumReservedRooms(activeBookings: ActiveBookingWindow[], requ
   return maximum
 }
 
+/**
+ * Calendar dates a channel hold must be checked against. A full-day request only
+ * consumes the nights it covers, but an hourly request that runs past midnight also
+ * touches the following day.
+ */
+export function requestHoldDates(request: RequestedWindow) {
+  if (request.slotType === 'FULLDAY') return [...request.dates]
+
+  const dates = new Set(request.dates)
+  if (request.endTime <= request.startTime) {
+    for (const date of request.dates) {
+      const timestamp = Date.parse(`${date}T00:00:00Z`)
+      if (!Number.isFinite(timestamp)) continue
+      dates.add(new Date(timestamp + DAY_MS).toISOString().slice(0, 10))
+    }
+  }
+  return [...dates]
+}
+
+/**
+ * Units a channel partner holds across the requested window. Holds on different dates
+ * are not additive - the busiest single date decides how much inventory is unavailable,
+ * mirroring how `maximumReservedRooms` treats concurrent bookings.
+ */
+export function heldUnitsForRequest(holds: InventoryHold[], request: RequestedWindow) {
+  if (holds.length === 0) return 0
+
+  const dates = new Set(requestHoldDates(request))
+  let maximum = 0
+  for (const hold of holds) {
+    if (!dates.has(hold.date)) continue
+    maximum = Math.max(maximum, Math.max(0, Math.floor(hold.unitsHeld)))
+  }
+  return maximum
+}
+
 export function requestHasCapacity(
   activeBookings: ActiveBookingWindow[],
   request: RequestedWindow,
   inventoryCount = 1,
   requestedRoomCount = 1,
+  holds: InventoryHold[] = [],
 ) {
   const inventory = Math.max(1, Math.floor(inventoryCount))
   const requestedRooms = Math.max(1, Math.floor(requestedRoomCount))
-  return maximumReservedRooms(activeBookings, request) + requestedRooms <= inventory
+  const heldUnits = heldUnitsForRequest(holds, request)
+  return maximumReservedRooms(activeBookings, request) + heldUnits + requestedRooms <= inventory
 }
 
 export function slotIsUnavailable(
@@ -157,6 +205,7 @@ export function slotIsUnavailable(
   requestedEndDate = slot.date,
   inventoryCount = 1,
   requestedRoomCount = 1,
+  holds: InventoryHold[] = [],
 ) {
   const dates = slot.slotType === 'FULLDAY'
     ? fullDayStayDates(slot.date, requestedEndDate)
@@ -167,5 +216,5 @@ export function slotIsUnavailable(
     slotType: slot.slotType,
     startTime: slot.startTime,
     endTime: slot.endTime,
-  }, inventoryCount, requestedRoomCount)
+  }, inventoryCount, requestedRoomCount, holds)
 }

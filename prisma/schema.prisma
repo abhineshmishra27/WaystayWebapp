@@ -282,6 +282,7 @@ model Room {
   ai_last_checked_at  DateTime
   ai_clean_status     String     @default("clean")
   slots               RoomSlot[]
+  channelHolds        ChannelInventoryHold[]
 }
 
 model RoomSlot {
@@ -298,6 +299,23 @@ model RoomSlot {
   bookings Booking[]
 
   @@unique([roomId, date, slotType, startTime])
+}
+
+/// Inventory a channel partner (PMS/channel manager) has sold outside WayStay.
+/// Held units reduce a room's effective inventory for that date - RoomSlot.isBooked
+/// is not consulted by the capacity check, so blocking must happen here.
+model ChannelInventoryHold {
+  id        String   @id @default(cuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  date      String
+  unitsHeld Int      @default(0)
+  source    String   @default("CLOUDBEDS")
+  syncedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([roomId, date])
+  @@index([date])
 }
 
 model Booking {

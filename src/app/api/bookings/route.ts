@@ -8,8 +8,8 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
-import { dateRangeStrings, fullDayStayDates, requestHasCapacity } from '@/lib/booking-inventory'
-import { lockRoomInventory } from '@/lib/booking-inventory-db'
+import { dateRangeStrings, fullDayStayDates, requestHasCapacity, requestHoldDates } from '@/lib/booking-inventory'
+import { loadChannelHoldsForRoom, lockRoomInventory } from '@/lib/booking-inventory-db'
 import { slotIsPastForBooking, todayInIndia } from '@/lib/booking-time'
 import { roomAllowsSlotType } from '@/lib/room-slot-settings'
 import { createBookingDateTimes } from '@/lib/booking-datetime'
@@ -167,12 +167,18 @@ export async function POST(req: NextRequest) {
           roomSlot: { select: { date: true, slotType: true, startTime: true, endTime: true } },
         },
       })
+      const channelHolds = await loadChannelHoldsForRoom(tx, slot.roomId, requestHoldDates({
+        dates,
+        slotType: slot.slotType,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+      }))
       if (!requestHasCapacity(activeBookings, {
         dates,
         slotType: slot.slotType,
         startTime: slot.startTime,
         endTime: slot.endTime,
-      }, slot.room.inventoryCount, roomCount)) {
+      }, slot.room.inventoryCount, roomCount, channelHolds)) {
         throw new Error('Not enough rooms are available for this time')
       }
 

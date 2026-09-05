@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
-import { slotIsUnavailable } from '@/lib/booking-inventory'
+import { dateRangeStrings, slotIsUnavailable } from '@/lib/booking-inventory'
+import { loadChannelHoldsForRoom } from '@/lib/booking-inventory-db'
 import { slotIsPastForBooking, todayInIndia } from '@/lib/booking-time'
 import { roomAllowsSlotType } from '@/lib/room-slot-settings'
 
@@ -55,6 +56,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
     ])
     if (!room) return NextResponse.json({ error: 'Room not found' }, { status: 404 })
 
+    // One day past the range so overnight hourly slots still see the next day's holds.
+    const dayAfterRange = new Date(Date.parse(`${effectiveEndDate}T00:00:00Z`) + 86_400_000)
+      .toISOString()
+      .slice(0, 10)
+    const channelHolds = await loadChannelHoldsForRoom(
+      prisma,
+      roomId,
+      dateRangeStrings(effectiveStartDate, dayAfterRange),
+    )
+
     const availability = slots.reduce<Record<string, Array<{ id: string; date: string; startTime: string; endTime: string; slotType: string; isBooked: boolean; hasStarted: boolean; isEnabled: boolean }>>>(
       (acc, slot) => {
         const key = slot.date
@@ -73,6 +84,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
             slot.slotType === 'FULLDAY' ? effectiveEndDate : slot.date,
             room.inventoryCount,
             requestedRoomCount,
+            channelHolds,
           ),
           hasStarted,
           isEnabled,
