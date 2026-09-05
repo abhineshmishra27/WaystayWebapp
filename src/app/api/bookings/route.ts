@@ -136,6 +136,13 @@ export async function POST(req: NextRequest) {
       if (!slot.room.hotel.isApproved || !slot.room.hotel.isActive || !slot.room.hotel.ownerEnabled) {
         throw new Error('This hotel is not currently accepting bookings')
       }
+      // Pay-at-hotel confirms a booking outright with nothing collected. On our own
+      // hotels that is a business call; on channel-managed inventory it commits a
+      // partner's room on a promise, and if the push to the channel then fails we have
+      // sold a room we do not control. Channel stays must be paid up front.
+      if (paymentMethod === 'PAY_AT_HOTEL' && slot.room.hotel.channelConnectionId) {
+        throw new Error('This property requires online payment to confirm the booking')
+      }
       await lockRoomInventory(tx, slot.roomId)
       const maxGuestsPerRoom = Math.max(1, Math.min(slot.room.maxOccupancy, 3))
       const requiredRooms = Math.ceil(guestCount / maxGuestsPerRoom)

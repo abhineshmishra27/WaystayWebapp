@@ -490,6 +490,10 @@ model Booking {
   channelPush   ChannelBookingMapping?
 
   @@index([roomSlotId, status])
+  /// "My bookings" for one customer, newest first.
+  @@index([customerId, status, createdAt])
+  /// The stale-payment cron sweeps PENDING bookings older than a cutoff.
+  @@index([status, createdAt])
 }
 
 model BookingExtension {
