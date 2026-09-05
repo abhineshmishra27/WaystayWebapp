@@ -332,6 +332,11 @@ model Room {
   slots               RoomSlot[]
   channelHolds        ChannelInventoryHold[]
   channelMapping      ChannelRoomMapping?
+
+  /// Search loads rooms for a batch of candidate hotels and filters them by stay type
+  /// in SQL; without these it degrades to a scan of every room in the system.
+  @@index([hotelId])
+  @@index([hotelId, isActive, available])
 }
 
 model RoomSlot {
