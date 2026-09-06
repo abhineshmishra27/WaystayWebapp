@@ -5,6 +5,10 @@
     {
       "path": "/api/cron/expire-stale-payments",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/prune-past-slots",
+      "schedule": "30 1 * * *"
     }
   ]
 }
