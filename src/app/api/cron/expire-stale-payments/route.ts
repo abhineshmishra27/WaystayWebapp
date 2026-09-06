@@ -4,6 +4,7 @@ import { sendBookingConfirmation } from '@/lib/email'
 import { failPendingRazorpayPayment, finalizeRazorpayPayment } from '@/lib/payments'
 import { getRazorpay } from '@/lib/razorpay'
 import { logger } from '@/lib/logger'
+import { notifyChannelOfConfirmedBooking } from '@/lib/channels/sync'
 
 const DEFAULT_EXPIRY_MINUTES = 20
 
@@ -53,6 +54,7 @@ export async function GET(req: NextRequest) {
         })
         confirmed++
         if (result.newlyConfirmed) {
+          await notifyChannelOfConfirmedBooking(result.booking.id)
           try {
             await sendBookingConfirmation(result.booking)
           } catch (emailError) {

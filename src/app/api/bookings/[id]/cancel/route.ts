@@ -9,6 +9,7 @@ import { canCancelBooking } from '@/lib/booking-cancellation'
 import { moneyToNumber } from '@/lib/money'
 import { initiateRazorpayRefund, RazorpayRefundPersistenceError, recordPaymentEvent } from '@/lib/payments'
 import { logger } from '@/lib/logger'
+import { notifyChannelOfCancelledBooking } from '@/lib/channels/sync'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -119,6 +120,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
       await releaseBookingSlots(tx, booking)
     })
+
+    // Release the partner's room before telling the guest. Non-blocking: a channel
+    // that cannot be reached must not make a valid cancellation fail.
+    await notifyChannelOfCancelledBooking(id)
 
     try {
       await sendBookingCancellation(booking, refundAmount)

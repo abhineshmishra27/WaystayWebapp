@@ -106,7 +106,14 @@ enum ChannelPushStatus {
   PENDING
   PUSHED
   FAILED
+  /// Retried until the attempt limit without success. Needs a human, not another retry.
   ABANDONED
+  /// The reservation was pushed and has since been cancelled on the channel. Distinct
+  /// from PUSHED so a cancelled stay is never mistaken for one still holding a room.
+  CANCELLED
+  /// Cancelled on WayStay, but the channel could not be told. The partner still believes
+  /// the room is sold, so this needs chasing.
+  CANCEL_FAILED
 }
 
 model User {

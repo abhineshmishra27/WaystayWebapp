@@ -10,6 +10,7 @@ import { canCancelBooking } from '@/lib/booking-cancellation'
 import { moneyToNumber } from '@/lib/money'
 import { initiateRazorpayRefund, RazorpayRefundPersistenceError, recordPaymentEvent } from '@/lib/payments'
 import { logger } from '@/lib/logger'
+import { notifyChannelOfCancelledBooking } from '@/lib/channels/sync'
 
 const schema = z.object({
   reason: z.string().trim().min(5).max(500),
@@ -174,6 +175,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     logger.error('api.admin.bookings.cancel.administrative_cancellation_finalization_failed', error)
     return NextResponse.json({ error: 'The refund state was saved, but cancellation finalization needs attention. Retry this booking.' }, { status: 500 })
   }
+
+  // The partner is still holding this room until told otherwise.
+  await notifyChannelOfCancelledBooking(booking.id)
 
   try {
     await sendBookingCancellation(booking, refundAmount)

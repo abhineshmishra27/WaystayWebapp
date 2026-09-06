@@ -23,6 +23,13 @@ export function createCloudbedsFake(options = {}) {
     refreshCount: 0,
     /** Set to make the next API call answer 401, exercising the refresh-and-retry path. */
     rejectNextWithAuthError: false,
+    /** Reservations the fake has accepted, keyed by thirdPartyIdentifier. */
+    reservationsByKey: new Map(),
+    reservationRequests: [],
+    cancelled: [],
+    failNextReservation: false,
+    failNextCancellation: false,
+    reservationReturnsNoId: false,
     availabilityByDate: options.availabilityByDate ?? {},
     unitCount: options.unitCount ?? 3,
     currency: options.currency ?? 'INR',
@@ -149,6 +156,49 @@ export function createCloudbedsFake(options = {}) {
           },
         ],
       })
+    }
+
+    if (method === 'postReservation') {
+      let body = ''
+      request.on('data', chunk => (body += chunk))
+      request.on('end', () => {
+        const parsed = JSON.parse(body || '{}')
+        state.reservationRequests.push(parsed)
+
+        if (state.failNextReservation) {
+          state.failNextReservation = false
+          return send(response, 502, { success: false, message: 'provider is having a moment' })
+        }
+        if (state.reservationReturnsNoId) {
+          return send(response, 200, { success: true, data: {} })
+        }
+
+        // Honours the idempotency key: the same thirdPartyIdentifier yields the same
+        // reservation rather than a second one, which is what makes retrying safe.
+        const key = parsed.thirdPartyIdentifier
+        const existing = state.reservationsByKey.get(key)
+        if (existing) return send(response, 200, { success: true, data: { reservationID: existing } })
+
+        const reservationId = `res-${state.reservationsByKey.size + 1}`
+        state.reservationsByKey.set(key, reservationId)
+        send(response, 200, { success: true, data: { reservationID: reservationId } })
+      })
+      return
+    }
+
+    if (method === 'putReservation') {
+      let body = ''
+      request.on('data', chunk => (body += chunk))
+      request.on('end', () => {
+        const parsed = JSON.parse(body || '{}')
+        if (state.failNextCancellation) {
+          state.failNextCancellation = false
+          return send(response, 502, { success: false, message: 'cancel failed' })
+        }
+        state.cancelled.push(parsed.reservationID)
+        send(response, 200, { success: true, data: { reservationID: parsed.reservationID, status: 'canceled' } })
+      })
+      return
     }
 
     send(response, 404, { success: false, message: `fake has no handler for ${method}` })

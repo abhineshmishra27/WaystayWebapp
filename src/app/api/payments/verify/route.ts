@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { rateLimit } from '@/lib/rate-limit'
 import { sendBookingConfirmation } from '@/lib/email'
 import { finalizeRazorpayPayment, getPendingRazorpayBooking } from '@/lib/payments'
+import { notifyChannelOfConfirmedBooking } from '@/lib/channels/sync'
 import { validatePaymentVerification } from 'razorpay/dist/utils/razorpay-utils'
 import { z } from 'zod'
 import { requireApiPermission } from '@/lib/api-rbac'
@@ -64,6 +65,10 @@ export async function POST(req: NextRequest) {
       paymentId: razorpayPaymentId,
       customerId: session!.user.id,
     })
+
+    // Tell the channel before the guest, so a partner's room stops being offered as
+    // early as possible. Both are non-blocking: neither may fail a confirmed payment.
+    if (result.newlyConfirmed) await notifyChannelOfConfirmedBooking(result.booking.id)
 
     try {
       if (result.newlyConfirmed) await sendBookingConfirmation(result.booking)

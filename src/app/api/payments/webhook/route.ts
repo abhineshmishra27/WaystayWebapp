@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db'
 import { sendBookingConfirmation, sendRefundFailedAdminAlert } from '@/lib/email'
 import { finalizeRazorpayPayment, recordPaymentEvent } from '@/lib/payments'
 import { logger } from '@/lib/logger'
+import { notifyChannelOfConfirmedBooking } from '@/lib/channels/sync'
 
 interface WebhookPayment {
   id?: string
@@ -94,6 +95,7 @@ export async function POST(req: NextRequest) {
       })
       await prisma.webhookEvent.update({ where: { id: webhookEvent.id }, data: { outcome: 'processed' } })
       if (result.newlyConfirmed) {
+        await notifyChannelOfConfirmedBooking(result.booking.id)
         try {
           await sendBookingConfirmation(result.booking)
         } catch (emailError) {

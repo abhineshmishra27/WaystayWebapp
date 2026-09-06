@@ -4,6 +4,7 @@ import type { ChannelConnection, ChannelSyncKind, ChannelSyncOutcome, Prisma } f
 import { prisma } from '@/lib/db'
 import { bookingCoveredDates } from '@/lib/booking-inventory'
 import { lockRoomInventory } from '@/lib/booking-inventory-db'
+import { PLATFORM_CURRENCY } from '@/lib/money'
 import { resolveLocationFromDatabase } from '@/lib/search-db'
 import { generateSlotsForRoom } from '@/lib/slots'
 import { adapterForProvider, channelsAreEnabled, withFreshCredentials } from '@/lib/channels/credentials'
@@ -278,6 +279,265 @@ async function persistImport(input: {
 
     return { hotelId: hotel.id, roomsUpserted, created: !existingHotel }
   })
+}
+
+/**
+ * Attempts before a push is abandoned. Generous, because the alternative to retrying is
+ * a partner who believes a room is free while a guest is holding a paid booking for it.
+ */
+const MAX_PUSH_ATTEMPTS = 6
+const PUSH_BACKOFF_BASE_MS = 60_000
+
+/** 1m, 2m, 4m, 8m, 16m, 32m - fast enough to catch a blip, slow enough not to hammer. */
+function nextRetryDelayMs(attempts: number) {
+  return PUSH_BACKOFF_BASE_MS * Math.pow(2, Math.max(0, attempts - 1))
+}
+
+function toDateString(value: Date) {
+  return value.toISOString().slice(0, 10)
+}
+
+export type PushResult =
+  | { status: 'SKIPPED'; reason: string }
+  | { status: 'PUSHED'; externalReservationId: string }
+  | { status: 'FAILED' | 'ABANDONED'; error: string }
+
+/**
+ * Tells the channel about a booking WayStay has taken.
+ *
+ * Without this the integration is one-way: WayStay would sell imported inventory and
+ * the partner would go on offering the same room, which is the exact double sale the
+ * whole design exists to prevent.
+ *
+ * Idempotent by construction. The provider is given `thirdPartyIdentifier = booking.id`,
+ * so a retry after an ambiguous failure cannot create a second reservation, and a
+ * booking already marked PUSHED short-circuits before any call is made.
+ *
+ * Never throws at the caller. A push failure must not turn into a failed payment
+ * confirmation for a guest who has already paid - it is recorded for retry instead.
+ */
+export async function pushBookingToChannel(bookingId: string): Promise<PushResult> {
+  if (!channelsAreEnabled()) return { status: 'SKIPPED', reason: 'channels disabled' }
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: {
+      channelPush: true,
+      roomSlot: {
+        include: {
+          room: {
+            include: {
+              channelMapping: true,
+              hotel: { select: { id: true, channelConnectionId: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  if (!booking) return { status: 'SKIPPED', reason: 'booking not found' }
+
+  const connectionId = booking.roomSlot.room.hotel.channelConnectionId
+  const mapping = booking.roomSlot.room.channelMapping
+  // The overwhelmingly common case: an ordinary WayStay hotel, nothing to tell anyone.
+  if (!connectionId || !mapping) return { status: 'SKIPPED', reason: 'not channel-managed' }
+
+  if (booking.channelPush?.pushStatus === 'PUSHED' && booking.channelPush.externalReservationId) {
+    return { status: 'PUSHED', externalReservationId: booking.channelPush.externalReservationId }
+  }
+  if (booking.channelPush?.pushStatus === 'ABANDONED') {
+    return { status: 'SKIPPED', reason: 'previously abandoned; needs manual reconciliation' }
+  }
+
+  const attempts = (booking.channelPush?.pushAttempts ?? 0) + 1
+
+  try {
+    // Network first: holding a row lock across a provider call is how a slow partner
+    // becomes a database outage.
+    const reservation = await withFreshCredentials(connectionId, (credentials, connection) =>
+      adapterFor(connection).createReservation(credentials, connection.externalPropertyId, {
+        externalRoomTypeId: mapping.externalRoomTypeId,
+        externalRatePlanId: mapping.externalRatePlanId,
+        idempotencyKey: booking.id,
+        checkInDate: toDateString(booking.checkIn),
+        checkOutDate: toDateString(booking.checkOut),
+        guestName: booking.guestName,
+        guestEmail: booking.guestEmail,
+        guestPhone: booking.guestPhone,
+        guestCount: booking.guestCount,
+        roomCount: booking.roomCount,
+        totalAmount: Number(booking.totalAmount),
+        currency: PLATFORM_CURRENCY,
+      }),
+    )
+
+    await prisma.channelBookingMapping.upsert({
+      where: { bookingId: booking.id },
+      create: {
+        bookingId: booking.id,
+        connectionId,
+        externalReservationId: reservation.externalReservationId,
+        pushStatus: 'PUSHED',
+        pushAttempts: attempts,
+        lastPushedAt: new Date(),
+        nextRetryAt: null,
+        lastPushError: null,
+      },
+      update: {
+        externalReservationId: reservation.externalReservationId,
+        pushStatus: 'PUSHED',
+        pushAttempts: attempts,
+        lastPushedAt: new Date(),
+        nextRetryAt: null,
+        lastPushError: null,
+      },
+    })
+
+    await recordSyncLog({
+      connectionId,
+      kind: 'PUSH',
+      outcome: 'SUCCESS',
+      message: `Booking ${booking.id} pushed as reservation ${reservation.externalReservationId}`,
+    })
+    return { status: 'PUSHED', externalReservationId: reservation.externalReservationId }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const exhausted = attempts >= MAX_PUSH_ATTEMPTS
+    const pushStatus = exhausted ? 'ABANDONED' : 'FAILED'
+
+    await prisma.channelBookingMapping.upsert({
+      where: { bookingId: booking.id },
+      create: {
+        bookingId: booking.id,
+        connectionId,
+        pushStatus,
+        pushAttempts: attempts,
+        lastPushError: message.slice(0, 1000),
+        nextRetryAt: exhausted ? null : new Date(Date.now() + nextRetryDelayMs(attempts)),
+      },
+      update: {
+        pushStatus,
+        pushAttempts: attempts,
+        lastPushError: message.slice(0, 1000),
+        nextRetryAt: exhausted ? null : new Date(Date.now() + nextRetryDelayMs(attempts)),
+      },
+    })
+
+    await recordSyncLog({
+      connectionId,
+      kind: 'PUSH',
+      // Abandoned is a real failure needing a person; a retryable one is only partial.
+      outcome: exhausted ? 'FAILED' : 'PARTIAL',
+      message: `Booking ${booking.id} push attempt ${attempts} failed: ${message}`,
+    })
+    logger.error('channels.push.failed', error, { bookingId: booking.id, attempts, exhausted })
+
+    return { status: pushStatus, error: message }
+  }
+}
+
+/**
+ * Tells the channel a booking is no longer happening.
+ *
+ * Without it a cancelled WayStay booking would hold a partner's room forever - the
+ * mirror image of the double sale, and just as costly to them.
+ */
+export async function cancelBookingOnChannel(bookingId: string): Promise<PushResult> {
+  if (!channelsAreEnabled()) return { status: 'SKIPPED', reason: 'channels disabled' }
+
+  const mapping = await prisma.channelBookingMapping.findUnique({ where: { bookingId } })
+  // Nothing was ever pushed, so there is nothing to retract.
+  if (!mapping?.externalReservationId) return { status: 'SKIPPED', reason: 'never pushed' }
+  if (mapping.pushStatus === 'CANCELLED') {
+    return { status: 'SKIPPED', reason: 'already cancelled on the channel' }
+  }
+
+  try {
+    await withFreshCredentials(mapping.connectionId, (credentials, connection) =>
+      adapterFor(connection).cancelReservation(
+        credentials,
+        connection.externalPropertyId,
+        mapping.externalReservationId as string,
+      ),
+    )
+
+    await prisma.channelBookingMapping.update({
+      where: { bookingId },
+      data: { pushStatus: 'CANCELLED', lastPushedAt: new Date(), lastPushError: null, nextRetryAt: null },
+    })
+    await recordSyncLog({
+      connectionId: mapping.connectionId,
+      kind: 'PUSH',
+      outcome: 'SUCCESS',
+      message: `Booking ${bookingId} cancelled on the channel`,
+    })
+    return { status: 'PUSHED', externalReservationId: mapping.externalReservationId }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    // CANCEL_FAILED rather than FAILED: the partner is still holding a room for a stay
+    // that is not happening, which is a different problem from a push that never landed.
+    await prisma.channelBookingMapping.update({
+      where: { bookingId },
+      data: { pushStatus: 'CANCEL_FAILED', lastPushError: message.slice(0, 1000) },
+    })
+    await recordSyncLog({
+      connectionId: mapping.connectionId,
+      kind: 'PUSH',
+      outcome: 'FAILED',
+      message: `Booking ${bookingId} could not be cancelled on the channel: ${message}`,
+    })
+    logger.error('channels.cancel.failed', error, { bookingId })
+    return { status: 'FAILED', error: message }
+  }
+}
+
+/**
+ * Fire-and-forget wrapper for the payment-confirmation paths.
+ *
+ * `pushBookingToChannel` handles provider failures itself, but the lookup before it can
+ * still throw if the database hiccups. A guest who has paid must not see their
+ * confirmation fail because we could not tell a partner about it, so everything is
+ * swallowed here and left for the retry sweep. Existing at all means the four
+ * confirmation sites stay one line each and cannot each get the guarantee subtly wrong.
+ */
+export async function notifyChannelOfConfirmedBooking(bookingId: string) {
+  try {
+    await pushBookingToChannel(bookingId)
+  } catch (error) {
+    logger.error('channels.push.unexpected', error, { bookingId })
+  }
+}
+
+/** Same guarantee for the cancellation paths. */
+export async function notifyChannelOfCancelledBooking(bookingId: string) {
+  try {
+    await cancelBookingOnChannel(bookingId)
+  } catch (error) {
+    logger.error('channels.cancel.unexpected', error, { bookingId })
+  }
+}
+
+/**
+ * Re-attempts pushes that failed and are due. Called from the reconciliation cron, so a
+ * transient provider outage resolves itself without anyone watching.
+ */
+export async function retryDuePushes(limit = 25) {
+  if (!channelsAreEnabled()) return { attempted: 0, pushed: 0, stillFailing: 0 }
+
+  const due = await prisma.channelBookingMapping.findMany({
+    where: { pushStatus: 'FAILED', nextRetryAt: { lte: new Date() } },
+    select: { bookingId: true },
+    orderBy: { nextRetryAt: 'asc' },
+    take: limit,
+  })
+
+  let pushed = 0
+  for (const entry of due) {
+    const result = await pushBookingToChannel(entry.bookingId)
+    if (result.status === 'PUSHED') pushed++
+  }
+  return { attempted: due.length, pushed, stillFailing: due.length - pushed }
 }
 
 export type Overcommitment = {

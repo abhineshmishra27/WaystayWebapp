@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { logger } from '@/lib/logger'
 import { channelsAreEnabled } from '@/lib/channels/credentials'
-import { detectOvercommitment, recordSyncLog, syncAvailabilityWindow } from '@/lib/channels/sync'
+import { detectOvercommitment, recordSyncLog, retryDuePushes, syncAvailabilityWindow } from '@/lib/channels/sync'
 import { dateWindow } from '@/lib/channels/mapping'
 
 /**
@@ -112,8 +112,16 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Retries run whatever happened above: a push waiting on a transient provider outage
+  // is independent of whether any particular property synced this time round.
+  const pushRetries = await retryDuePushes()
+  if (pushRetries.stillFailing > 0) {
+    logger.warn('cron.sync_channels.pushes_still_failing', undefined, pushRetries)
+  }
+
   const failed = results.filter(result => !result.ok).length
   const summary = {
+    pushRetries,
     connectionsConsidered: connections.length,
     succeeded: results.length - failed,
     failed,
