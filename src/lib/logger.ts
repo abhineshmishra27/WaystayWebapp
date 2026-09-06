@@ -25,6 +25,76 @@ function configuredLevel(): LogLevel {
   return process.env.NODE_ENV === 'production' ? 'info' : 'debug'
 }
 
+export const REDACTED = '[redacted]'
+
+/**
+ * Keys whose values never belong in a log line.
+ *
+ * This is not hypothetical tidiness. `serializeError` copies every enumerable property
+ * off an error, and a Prisma error carries `meta` describing the failed query - which
+ * for a booking failure means the guest's email and phone number. Channel connections
+ * carry encrypted OAuth tokens on the row itself. Once logs are shipped anywhere
+ * external, anything matched here would have gone with them.
+ *
+ * Keys are split on camelCase and separators before matching, so `guestEmail`,
+ * `guest_email` and `email` all match on the word `email` while `slotPattern` does not
+ * match on `otp` - which plain substring matching would have got wrong.
+ */
+const SENSITIVE_WORDS = new Set([
+  'password',
+  'passwordhash',
+  'secret',
+  'token',
+  'authorization',
+  'cookie',
+  'credential',
+  'credentials',
+  'email',
+  'phone',
+  'mobile',
+  'otp',
+  'cvv',
+  'card',
+  'key',
+])
+
+/** Matched against the whole key, for names that do not split into useful words. */
+const SENSITIVE_KEY_PATTERNS = [/apikey/, /gst_?number/, /licen[sc]e_?number/, /tokenenc$/]
+
+/** Low false-positive: an address in free text is an address, not a stack frame. */
+const EMAIL_IN_TEXT = /[\w.+-]+@[\w-]+\.[\w.-]+/g
+
+export function isSensitiveKey(key: string) {
+  const lowered = key.toLowerCase()
+  if (SENSITIVE_KEY_PATTERNS.some(pattern => pattern.test(lowered))) return true
+
+  return key
+    // Split camelCase and PascalCase, then on any non-alphanumeric separator.
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[^a-zA-Z0-9]+/)
+    .some(word => SENSITIVE_WORDS.has(word.toLowerCase()))
+}
+
+/**
+ * Replaces sensitive values in place. Depth-bounded and cycle-safe, because this runs on
+ * whatever a caller happened to pass and must never be the thing that throws.
+ */
+export function redact(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
+  if (typeof value === 'string') return value.replace(EMAIL_IN_TEXT, REDACTED)
+  if (value === null || typeof value !== 'object' || depth > 6) return value
+
+  if (seen.has(value)) return '[circular]'
+  seen.add(value)
+
+  if (Array.isArray(value)) return value.map(entry => redact(entry, depth + 1, seen))
+
+  const result: Record<string, unknown> = {}
+  for (const [key, entry] of Object.entries(value)) {
+    result[key] = isSensitiveKey(key) ? REDACTED : redact(entry, depth + 1, seen)
+  }
+  return result
+}
+
 /**
  * Errors do not survive JSON.stringify - it yields `{}`. Unwrap the useful parts, and
  * follow `cause` so a wrapped provider error keeps the original reason attached.
@@ -67,13 +137,15 @@ export function formatLogLine(
   context?: LogContext,
   error?: unknown,
 ): string {
+  // Redaction runs over the whole payload rather than at each call site: a call site
+  // that forgets is exactly how a token reaches a log file, and there are dozens.
   const payload: Record<string, unknown> = {
     level,
     event,
     time: new Date().toISOString(),
-    ...(context ?? {}),
+    ...((redact(context ?? {}) as LogContext) ?? {}),
   }
-  if (error !== undefined) payload.error = serializeError(error)
+  if (error !== undefined) payload.error = redact(serializeError(error))
 
   try {
     return JSON.stringify(payload)
