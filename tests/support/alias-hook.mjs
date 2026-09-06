@@ -37,11 +37,34 @@ function resolveSourceFile(basePath) {
  */
 const TEST_STUBS = new Map([['@/lib/auth', resolvePath(projectRoot, 'tests/support/auth-stub.mts')]])
 
+/**
+ * Resolves `next/server` and friends the way Next's bundler does.
+ *
+ * The next package ships no exports map, so a bare `next/server` falls back to legacy
+ * resolution - and node's ESM loader will not guess the `.js` extension the way a
+ * bundler does. The file is there and imports cleanly; only the specifier needs
+ * completing. Without this, importing any route handler fails before a single
+ * assertion runs.
+ */
+function resolveNextSubpath(specifier, parentURL) {
+  // Only `next/server`, and only when our own code asks for it. A broader rule also
+  // catches the requires next/server.js makes internally, and rewriting those to file
+  // URLs breaks Next's own CJS loading - which fails further in and looks unrelated.
+  if (specifier !== 'next/server') return null
+  if (parentURL && parentURL.includes('/node_modules/')) return null
+
+  const candidate = resolvePath(projectRoot, 'node_modules', 'next', 'server.js')
+  return existsSync(candidate) ? candidate : null
+}
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (process.env.WAYSTAY_TEST_STUBS === '1') {
       const stub = TEST_STUBS.get(specifier)
       if (stub) return nextResolve(pathToFileURL(stub).href, context)
+
+      const nextSubpath = resolveNextSubpath(specifier, context.parentURL)
+      if (nextSubpath) return nextResolve(pathToFileURL(nextSubpath).href, context)
     }
     if (specifier === '@' || specifier.startsWith('@/')) {
       const basePath = resolvePath(sourceRoot, specifier === '@' ? '' : specifier.slice(2))

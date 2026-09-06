@@ -67,11 +67,20 @@ async function book(overrides: Record<string, unknown> = {}) {
   return { status: response.status, body: await response.json() }
 }
 
+/**
+ * Resets the state shared between tests.
+ *
+ * The rate-limit bucket matters as much as the bookings: the route allows ten bookings
+ * an hour per IP, every test here arrives from the same unknown address, and the
+ * buckets live in the database. Without clearing them the suite starts returning 429
+ * partway through and which test fails depends on execution order.
+ */
 async function clearBookings() {
   const { prisma } = await import('@/lib/db')
   await prisma.channelBookingMapping.deleteMany({})
   await prisma.payment.deleteMany({})
   await prisma.booking.deleteMany({})
+  await prisma.rateLimitBucket.deleteMany({})
 }
 
 test('a valid booking is created', async () => {
@@ -142,32 +151,33 @@ test('a room already booked for the night cannot be sold twice', async () => {
   assert.match(second.body.error, /rooms are available|at least/i)
 })
 
-test('channel inventory holds reduce what WayStay can sell', async () => {
+test('an inventory hold reduces what WayStay can sell', async () => {
   await clearBookings()
   const { prisma } = await import('@/lib/db')
 
-  // The room has one unit; holding it means the night is gone even with no bookings.
+  // Deliberately the ordinary room, not the channel one. A hold is keyed on the room
+  // and the capacity check applies to every room, so this isolates the hold's effect;
+  // the channel room cannot be booked in tests at all - pay-at-hotel is refused by the
+  // prepayment guard and Razorpay is intentionally unconfigured.
   await prisma.channelInventoryHold.create({
-    data: { roomId: fixtures.channelRoomId, date: fixtures.stayDate, unitsHeld: 1 },
+    data: { roomId: fixtures.roomId, date: fixtures.stayDate, unitsHeld: 1 },
   })
 
-  const response = await postBooking(
-    await jsonRequest(
-      'http://localhost/api/bookings',
-      bookingBody({ slotId: fixtures.channelSlotId, paymentMethod: 'RAZORPAY' }),
-    ),
-  )
-  const body = await response.json()
+  // The room has one unit, so a single held unit leaves nothing sellable even though
+  // there are no bookings at all.
+  const held = await book()
+  assert.equal(held.status, 409, `expected capacity rejection, got ${held.status}: ${JSON.stringify(held.body)}`)
+  assert.match(held.body.error, /rooms are available/i)
+  assert.equal(await prisma.booking.count(), 0)
 
-  // Razorpay is deliberately unconfigured in tests, so a reachable room would answer
-  // 503. Getting the capacity rejection instead proves the hold was applied.
-  assert.equal(response.status, 409, `expected capacity rejection, got ${response.status}: ${JSON.stringify(body)}`)
-  assert.match(body.error, /rooms are available/i)
-
+  // Releasing the hold makes the same request succeed, proving the hold caused it.
   await prisma.channelInventoryHold.deleteMany({})
+  const released = await book()
+  assert.equal(released.status, 201)
 })
 
 test('an unauthenticated request is rejected', async () => {
+  await clearBookings()
   setTestSession(null)
   const response = await postBooking(await jsonRequest('http://localhost/api/bookings', bookingBody()))
   assert.ok(response.status === 401 || response.status === 403, `expected 401/403, got ${response.status}`)

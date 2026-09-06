@@ -79,6 +79,32 @@ export async function teardownTestDatabase() {
 }
 
 /**
+ * Empties every application table on the branch.
+ *
+ * The branch is a clone, so it arrives carrying development data - fine for schema, no
+ * good for assertions that count rows. Ordered deletes are the obvious approach and the
+ * wrong one: Payment references Booking, Review references both, and the correct order
+ * changes every time the schema gains a table. TRUNCATE ... CASCADE is order-independent
+ * and discovers the table list at runtime, so it keeps working as the schema evolves.
+ *
+ * Safe only because this is a disposable branch; it would be catastrophic anywhere else,
+ * which is why it lives here rather than in a shared helper.
+ */
+async function truncateAllTables() {
+  const { prisma } = await import('@/lib/db')
+
+  const tables = await prisma.$queryRaw<Array<{ tablename: string }>>`
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public'
+      AND tablename NOT IN ('_prisma_migrations', 'spatial_ref_sys', 'geography_columns', 'geometry_columns')
+  `
+  if (tables.length === 0) return
+
+  const quoted = tables.map(table => `"public"."${table.tablename}"`).join(', ')
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${quoted} RESTART IDENTITY CASCADE`)
+}
+
+/**
  * A minimal but realistic graph: one ordinary hotel and one channel-managed hotel, each
  * with a room and a full-day slot. The channel hotel exists so the pay-at-hotel refusal
  * and currency guard can be tested for real rather than by faking a flag.
@@ -87,33 +113,21 @@ export async function seedFixtures(): Promise<TestFixtures> {
   const { prisma } = await import('@/lib/db')
   const { todayInIndia } = await import('@/lib/booking-time')
 
-  // Clone inherits the dev data, so start from a clean slate for deterministic counts.
-  await prisma.channelInventoryHold.deleteMany({})
-  await prisma.channelBookingMapping.deleteMany({})
-  await prisma.booking.deleteMany({})
-  await prisma.roomSlot.deleteMany({})
-  await prisma.channelRoomMapping.deleteMany({})
-  await prisma.room.deleteMany({})
-  await prisma.hotel.deleteMany({})
-  await prisma.channelConnection.deleteMany({})
+  await truncateAllTables()
 
   const stayDate = addDays(todayInIndia(), 3)
   const nextDate = addDays(stayDate, 1)
 
-  const customer = await prisma.user.upsert({
-    where: { email: 'route-test-customer@waystay.test' },
-    update: {},
-    create: {
+  const customer = await prisma.user.create({
+    data: {
       email: 'route-test-customer@waystay.test',
       name: 'Route Test Customer',
       passwordHash: 'not-used',
       role: 'CUSTOMER',
     },
   })
-  const owner = await prisma.user.upsert({
-    where: { email: 'route-test-owner@waystay.test' },
-    update: {},
-    create: {
+  const owner = await prisma.user.create({
+    data: {
       email: 'route-test-owner@waystay.test',
       name: 'Route Test Owner',
       passwordHash: 'not-used',

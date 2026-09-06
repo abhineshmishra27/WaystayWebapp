@@ -5,10 +5,16 @@ import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-
 import { rupeesToPaise, type MoneyValue } from '@/lib/money'
 import { waystayStatusForRazorpayRefund } from '@/lib/razorpay-status'
 
+// The field is declared explicitly rather than as a constructor parameter property:
+// the test runner strips types without transforming, and parameter properties are not
+// supported in that mode, so this module could not otherwise be loaded by a test.
 export class RazorpayRefundPersistenceError extends Error {
-  constructor(public readonly refundId: string, cause: unknown) {
+  readonly refundId: string
+
+  constructor(refundId: string, cause: unknown) {
     super('Razorpay accepted the refund, but WayStayy could not persist its state', { cause })
     this.name = 'RazorpayRefundPersistenceError'
+    this.refundId = refundId
   }
 }
 
