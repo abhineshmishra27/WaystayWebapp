@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { ChannelConnection, ChannelSyncKind, ChannelSyncOutcome, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { bookingCoveredDates } from '@/lib/booking-inventory'
 import { lockRoomInventory } from '@/lib/booking-inventory-db'
 import { resolveLocationFromDatabase } from '@/lib/search-db'
 import { generateSlotsForRoom } from '@/lib/slots'
@@ -277,6 +278,84 @@ async function persistImport(input: {
 
     return { hotelId: hotel.id, roomsUpserted, created: !existingHotel }
   })
+}
+
+export type Overcommitment = {
+  roomId: string
+  date: string
+  inventoryCount: number
+  bookedUnits: number
+  heldUnits: number
+}
+
+/**
+ * Finds rooms sold beyond what exists, counting WayStay bookings and channel holds
+ * together against the room's inventory.
+ *
+ * Preventing a double sale outright is not possible: there is an irreducible gap between
+ * an OTA selling a room and us being told. What is possible is noticing quickly. This is
+ * the detection half of that promise - it answers "did the last sync reveal that we have
+ * committed more rooms than we have", which is the only question that matters once the
+ * gap has been exploited.
+ *
+ * Read-only by design. Automatically cancelling a guest's booking to resolve an
+ * overcommitment is not a decision code should take.
+ */
+export async function detectOvercommitment(connectionId: string, dates: string[]): Promise<Overcommitment[]> {
+  if (dates.length === 0) return []
+
+  const mappings = await prisma.channelRoomMapping.findMany({
+    where: { connectionId },
+    select: { roomId: true, room: { select: { inventoryCount: true } } },
+  })
+  if (mappings.length === 0) return []
+
+  const roomIds = mappings.map(mapping => mapping.roomId)
+  const inventoryByRoomId = new Map(mappings.map(mapping => [mapping.roomId, mapping.room.inventoryCount]))
+
+  const [bookings, holds] = await Promise.all([
+    prisma.booking.findMany({
+      where: {
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        roomSlot: { roomId: { in: roomIds } },
+      },
+      select: {
+        totalHours: true,
+        roomCount: true,
+        roomSlot: { select: { roomId: true, date: true, slotType: true, startTime: true, endTime: true } },
+      },
+    }),
+    prisma.channelInventoryHold.findMany({
+      where: { roomId: { in: roomIds }, date: { in: dates } },
+      select: { roomId: true, date: true, unitsHeld: true },
+    }),
+  ])
+
+  // A full-day booking occupies every night it spans, not just its start date.
+  const bookedByRoomDate = new Map<string, number>()
+  for (const booking of bookings) {
+    const rooms = Math.max(1, Math.floor(booking.roomCount ?? 1))
+    for (const date of bookingCoveredDates(booking)) {
+      const key = `${booking.roomSlot.roomId}:${date}`
+      bookedByRoomDate.set(key, (bookedByRoomDate.get(key) ?? 0) + rooms)
+    }
+  }
+
+  const heldByRoomDate = new Map(holds.map(hold => [`${hold.roomId}:${hold.date}`, hold.unitsHeld]))
+
+  const overcommitted: Overcommitment[] = []
+  for (const roomId of roomIds) {
+    const inventoryCount = inventoryByRoomId.get(roomId) ?? 1
+    for (const date of dates) {
+      const key = `${roomId}:${date}`
+      const bookedUnits = bookedByRoomDate.get(key) ?? 0
+      const heldUnits = heldByRoomDate.get(key) ?? 0
+      if (bookedUnits + heldUnits > inventoryCount) {
+        overcommitted.push({ roomId, date, inventoryCount, bookedUnits, heldUnits })
+      }
+    }
+  }
+  return overcommitted
 }
 
 /**

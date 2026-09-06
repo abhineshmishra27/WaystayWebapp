@@ -1,6 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["sin1"],
+  "regions": [
+    "sin1"
+  ],
   "crons": [
     {
       "path": "/api/cron/expire-stale-payments",
@@ -13,6 +15,10 @@
     {
       "path": "/api/cron/extend-slot-horizon",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/sync-channels",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
