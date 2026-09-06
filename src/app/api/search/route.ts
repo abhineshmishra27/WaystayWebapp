@@ -37,6 +37,22 @@ import {
  */
 const CANDIDATE_POOL_LIMIT = 300
 
+/**
+ * How far back to look for bookings that might still overlap the requested dates.
+ *
+ * A full-day booking occupies its start date plus however many nights it runs, so one
+ * that began before the search window can still consume inventory inside it. The
+ * capacity check needs those, but it does not need every booking ever made: without a
+ * lower bound this query grows with the lifetime of the business. Thirty days covers
+ * any realistic stay; a longer one would have to start more than a month before the
+ * dates being searched.
+ */
+const OVERLAPPING_STAY_LOOKBACK_DAYS = 30
+
+function shiftDate(date: string, days: number) {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
+}
+
 type PricedRoom = RoomSlotSettings & {
   inventoryCount: number
   pricePerHour: number
@@ -314,7 +330,15 @@ export async function GET(req: NextRequest) {
             prisma.booking.findMany({
               where: {
                 status: { in: ['PENDING', 'CONFIRMED'] },
-                roomSlot: { roomId: { in: roomIds } },
+                roomSlot: {
+                  roomId: { in: roomIds },
+                  // Bounded so this does not grow with every booking ever taken. The
+                  // lower bound still catches a long stay that began before the window.
+                  date: {
+                    gte: shiftDate(startDate, -OVERLAPPING_STAY_LOOKBACK_DAYS),
+                    lte: slotType === 'FULLDAY' ? endDate : startDate,
+                  },
+                },
               },
               select: {
                 totalHours: true,

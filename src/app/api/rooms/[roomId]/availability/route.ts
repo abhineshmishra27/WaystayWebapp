@@ -46,7 +46,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
       prisma.booking.findMany({
         where: {
           status: { in: ['PENDING', 'CONFIRMED'] },
-          roomSlot: { roomId, date: { lte: effectiveEndDate } },
+          // Bounded below as well as above: without a lower bound this loads every
+          // booking the room has ever had. Thirty days back still catches a long stay
+          // that started before the window and runs into it.
+          roomSlot: {
+            roomId,
+            date: {
+              gte: new Date(Date.parse(`${effectiveStartDate}T00:00:00Z`) - 30 * 86_400_000)
+                .toISOString()
+                .slice(0, 10),
+              lte: effectiveEndDate,
+            },
+          },
         },
         select: {
           totalHours: true,
