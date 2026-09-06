@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db'
 import { bookingCoveredDates } from '@/lib/booking-inventory'
 import { lockRoomInventory } from '@/lib/booking-inventory-db'
 import { PLATFORM_CURRENCY } from '@/lib/money'
+import { ingestImages, type IngestedImage } from '@/lib/channels/images'
 import { resolveLocationFromDatabase } from '@/lib/search-db'
 import { generateSlotsForRoom } from '@/lib/slots'
 import { adapterForProvider, channelsAreEnabled, withFreshCredentials } from '@/lib/channels/credentials'
@@ -135,11 +136,29 @@ export async function importHotelFromConnection(connectionId: string) {
         (hotelFields.pincode ? await resolveLocationFromDatabase(hotelFields.pincode) : null)
         ?? (hotelFields.city ? await resolveLocationFromDatabase(hotelFields.city) : null)
 
+      // Re-hosted before the transaction opens: this talks to Cloudinary, which fetches
+      // each photograph from the provider, and network calls do not belong inside a
+      // transaction. A property with no usable images simply yields none.
+      const hotelImages = await ingestImages(
+        property.imageUrls,
+        `${current.provider}-${current.externalPropertyId}-hotel`,
+      )
+      const roomImagesByRoomType = new Map<string, string[]>()
+      for (const roomType of roomTypes) {
+        const ingested = await ingestImages(
+          roomType.imageUrls,
+          `${current.provider}-${current.externalPropertyId}-room-${roomType.externalRoomTypeId}`,
+        )
+        roomImagesByRoomType.set(roomType.externalRoomTypeId, ingested.map(image => image.url))
+      }
+
       return persistImport({
         connection: current,
         hotelFields,
         locationId: canonicalLocation?.location.id ?? null,
         roomTypes,
+        hotelImages,
+        roomImagesByRoomType,
         propertyName: property.name,
         propertyTimezone: property.timezone,
         currency: property.currency,
@@ -197,11 +216,13 @@ async function persistImport(input: {
   hotelFields: ReturnType<typeof toHotelFields>
   locationId: string | null
   roomTypes: ExternalRoomType[]
+  hotelImages: IngestedImage[]
+  roomImagesByRoomType: Map<string, string[]>
   propertyName: string
   propertyTimezone: string
   currency: string
 }) {
-  const { connection, hotelFields, locationId, roomTypes } = input
+  const { connection, hotelFields, locationId, roomTypes, hotelImages, roomImagesByRoomType } = input
 
   return prisma.$transaction(async tx => {
     const existingHotel = await tx.hotel.findFirst({
@@ -230,9 +251,33 @@ async function persistImport(input: {
           },
         })
 
+    // Upserted by publicId, which is derived from the connection and the source index,
+    // so a re-import refreshes the same rows instead of stacking duplicates on a
+    // listing every time the property syncs.
+    for (const [index, image] of hotelImages.entries()) {
+      const existingImage = await tx.hotelImage.findFirst({
+        where: { hotelId: hotel.id, publicId: image.publicId },
+        select: { id: true },
+      })
+      if (existingImage) {
+        await tx.hotelImage.update({
+          where: { id: existingImage.id },
+          data: { url: image.url, sortOrder: index },
+        })
+      } else {
+        await tx.hotelImage.create({
+          data: { hotelId: hotel.id, url: image.url, publicId: image.publicId, sortOrder: index },
+        })
+      }
+    }
+
     let roomsUpserted = 0
     for (const roomType of roomTypes) {
-      const roomFields = toRoomFields(roomType)
+      const roomFields = {
+        ...toRoomFields(roomType),
+        // Prefer the re-hosted URLs; the provider's own links would not render.
+        images: roomImagesByRoomType.get(roomType.externalRoomTypeId) ?? [],
+      }
       const mapping = await tx.channelRoomMapping.findUnique({
         where: {
           connectionId_externalRoomTypeId: {

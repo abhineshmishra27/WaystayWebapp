@@ -146,14 +146,12 @@ test('a night the channel has sold is not offered by WayStay', async () => {
   assert.ok(after.hotels.some(hotel => hotel.id === importedHotelId), 'and returns when the hold clears')
 })
 
-test('the listing carries no image, because image ingestion is not built yet', async () => {
-  // Documents a real gap rather than asserting a nicety: the importer records image URLs
-  // on the room, but nothing puts them on the Hotel, and next.config.ts allowlists only
-  // Unsplash and Cloudinary - so a Cloudbeds-hosted photo would not render even if it
-  // were there. Guests would see a placeholder. This test should be deleted when that
-  // is fixed.
+test('the listing shows a photograph, served from our own image host', async () => {
   const browse = await search('city=Bengaluru')
   const found = browse.hotels.find(hotel => hotel.id === importedHotelId)
   assert.ok(found)
-  assert.equal(found.image, null)
+  assert.ok(found.image, 'an imported listing must not fall back to a placeholder')
+  // Must be re-hosted, not the provider's URL: next.config.ts allowlists Cloudinary, so
+  // a channel-hosted photo would be rejected by next/image and render as nothing.
+  assert.match(found.image, /res\.cloudinary\.com/)
 })

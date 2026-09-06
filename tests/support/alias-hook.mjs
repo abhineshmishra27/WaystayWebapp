@@ -35,7 +35,12 @@ function resolveSourceFile(basePath) {
  * re-test. Everything else - permissions, Prisma, the handlers themselves - stays real,
  * because those are what the tests exist to check.
  */
-const TEST_STUBS = new Map([['@/lib/auth', resolvePath(projectRoot, 'tests/support/auth-stub.mts')]])
+const TEST_STUBS = new Map([
+  ['@/lib/auth', resolvePath(projectRoot, 'tests/support/auth-stub.mts')],
+  // Image ingestion asks Cloudinary to fetch a remote URL. Unstubbed, tests would make
+  // real uploads into the product's own account for images that do not exist.
+  ['@/lib/cloudinary', resolvePath(projectRoot, 'tests/support/cloudinary-stub.mts')],
+])
 
 /**
  * Resolves `next/server` and friends the way Next's bundler does.
