@@ -9,6 +9,10 @@
     {
       "path": "/api/cron/prune-past-slots",
       "schedule": "30 1 * * *"
+    },
+    {
+      "path": "/api/cron/extend-slot-horizon",
+      "schedule": "0 2 * * *"
     }
   ]
 }
