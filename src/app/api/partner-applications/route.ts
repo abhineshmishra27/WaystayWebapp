@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db'
 import { sendPartnerApplicationAdminEmail } from '@/lib/email'
 import { normalizePhone } from '@/lib/otp'
 import { rateLimit } from '@/lib/rate-limit'
+import { logger } from '@/lib/logger'
 
 const GST_NUMBER_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/
 
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
       await sendPartnerApplicationAdminEmail(application)
     } catch (error) {
       notificationSent = false
-      console.error('Partner application admin email failed:', error)
+      logger.error('api.partner-applications.partner_application_admin_email_failed', error)
     }
 
     return NextResponse.json({
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
       notificationSent,
     }, { status: 201 })
   } catch (error) {
-    console.error('Partner application error:', error)
+    logger.error('api.partner-applications.partner_application_error', error)
     if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
       return NextResponse.json({ error: 'That email address or mobile number is already registered.' }, { status: 409 })
     }

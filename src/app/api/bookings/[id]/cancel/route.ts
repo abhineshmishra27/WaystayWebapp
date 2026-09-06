@@ -8,6 +8,7 @@ import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-
 import { canCancelBooking } from '@/lib/booking-cancellation'
 import { moneyToNumber } from '@/lib/money'
 import { initiateRazorpayRefund, RazorpayRefundPersistenceError, recordPaymentEvent } from '@/lib/payments'
+import { logger } from '@/lib/logger'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -75,7 +76,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           return NextResponse.json({ error: 'Razorpay could not process the refund. Your booking remains active; please contact support.' }, { status: 502 })
         }
       } catch (refundErr) {
-        console.error('Refund failed:', refundErr)
+        logger.error('api.bookings.cancel.refund_failed', refundErr)
         if (refundErr instanceof RazorpayRefundPersistenceError) {
           return NextResponse.json({
             error: `Razorpay accepted refund ${refundErr.refundId}, but confirmation is still pending. The booking remains active; please contact support.`,
@@ -121,7 +122,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     try {
       await sendBookingCancellation(booking, refundAmount)
-    } catch (e) { console.error('Cancel email error:', e) }
+    } catch (e) { logger.error('api.bookings.cancel.cancel_email_error', e) }
 
     return NextResponse.json({ success: true, refundAmount })
   } catch (error) {

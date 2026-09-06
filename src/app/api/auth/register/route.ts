@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error('Register error:', error)
+    logger.error('api.auth.register.register_error', error)
     if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
       return NextResponse.json(
         { error: 'That email address or mobile number is already registered.' },

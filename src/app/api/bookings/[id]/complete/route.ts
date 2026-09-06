@@ -38,7 +38,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       try {
         const hotelName = booking.roomSlot?.room?.hotel?.name || 'WayStayy'
         await sendReviewNudge(booking, hotelName)
-      } catch (e) { console.error('Review nudge error:', e) }
+      } catch (e) { logger.error('api.bookings.complete.review_nudge_error', e) }
     }, 2 * 60 * 60 * 1000)
 
     return NextResponse.json({ success: true })

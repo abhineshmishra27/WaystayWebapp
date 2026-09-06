@@ -43,6 +43,13 @@ const CHANNEL_CURRENCY_MISMATCH = 'This property is not currently bookable on Wa
  */
 const DUPLICATE_SUBMIT_WINDOW_MS = 2 * 60 * 1000
 
+/**
+ * Hours per stay type. Module-scoped because both the duplicate check and the booking
+ * it guards derive totalHours from it - if they disagreed, the guard would compare
+ * against a number the booking never stored.
+ */
+const SLOT_HOURS: Record<string, number> = { H3: 3, H6: 6, H12: 12, FULLDAY: 24 }
+
 function isRazorpayConfigured() {
   return Boolean(
     process.env.RAZORPAY_KEY_ID?.startsWith('rzp_') &&
@@ -194,36 +201,6 @@ export async function POST(req: NextRequest) {
       }
       await lockRoomInventory(tx, slot.roomId)
 
-      // Double-submit guard. A double-click, an impatient retry or a dropped response
-      // otherwise produces a second booking and a second payment order for the same
-      // stay. Inventory was never at risk - the advisory lock above and the capacity
-      // check below see to that - but the duplicate row and orphan order are real.
-      // Safe to check-then-create because the lock serialises every writer per room.
-      const duplicate = await tx.booking.findFirst({
-        where: {
-          customerId: session!.user.id,
-          roomSlotId: slotId,
-          guestEmail,
-          roomCount,
-          guestCount,
-          status: { in: ['PENDING', 'CONFIRMED'] },
-          createdAt: { gt: new Date(Date.now() - DUPLICATE_SUBMIT_WINDOW_MS) },
-        },
-        include: { payment: { select: { providerOrderId: true } } },
-        orderBy: { createdAt: 'desc' },
-      })
-      if (duplicate) {
-        logger.info('api.bookings.duplicate_submit_ignored', {
-          bookingId: duplicate.id,
-          customerId: session!.user.id,
-          slotId,
-        })
-        // Return the original rather than an error: from the caller's point of view the
-        // request succeeded, and handing back the same order id lets an interrupted
-        // checkout resume instead of stranding a paid-for-nothing order.
-        const { payment, ...bookingOnly } = duplicate
-        return { booking: bookingOnly, razorpayOrderId: payment?.providerOrderId ?? null, duplicate: true }
-      }
       const maxGuestsPerRoom = Math.max(1, Math.min(slot.room.maxOccupancy, 3))
       const requiredRooms = Math.ceil(guestCount / maxGuestsPerRoom)
       if (roomCount < requiredRooms) {
@@ -242,6 +219,50 @@ export async function POST(req: NextRequest) {
       if (slotType && slot.slotType !== slotType) throw new Error('Selected slot type does not match the booking request')
       if (!roomAllowsSlotType(slot.room, slot.slotType)) throw new Error('This stay duration is disabled for this room')
       if (slotIsPastForBooking(slot.slotType, slot.date, slot.startTime)) throw new Error('This slot has already started')
+      // Double-submit guard. A double-click, an impatient retry or a dropped response
+      // otherwise produces a second booking and a second payment order for the same
+      // stay. Inventory was never at risk - the advisory lock above and the capacity
+      // check below see to that - but the duplicate row and orphan order are real.
+      //
+      // Placed here on purpose. It has to run after the stay length is known, because
+      // roomSlotId alone identifies only the first night: matching without totalHours
+      // would answer a three-night request with a one-night booking. It also has to run
+      // before the capacity check, or a double-click on a single-unit room would be
+      // rejected as "no rooms available" by the caller's own first booking rather than
+      // recognised as a repeat. Safe as check-then-create because the advisory lock
+      // serialises every writer for this room.
+      const expectedStatus = paymentMethod === 'PAY_AT_HOTEL' ? 'CONFIRMED' : 'PENDING'
+      const expectedTotalHours = (SLOT_HOURS[slot.slotType] ?? 3) * dates.length
+      const duplicate = await tx.booking.findFirst({
+        where: {
+          customerId: session!.user.id,
+          roomSlotId: slotId,
+          guestEmail,
+          roomCount,
+          guestCount,
+          totalHours: expectedTotalHours,
+          // Discriminates the payment intent: a pay-at-hotel retry looks for the
+          // confirmed booking it made, an online retry for the pending one.
+          status: expectedStatus,
+          createdAt: { gt: new Date(Date.now() - DUPLICATE_SUBMIT_WINDOW_MS) },
+        },
+        include: { payment: { select: { providerOrderId: true } } },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (duplicate) {
+        logger.info('api.bookings.duplicate_submit_ignored', {
+          bookingId: duplicate.id,
+          customerId: session!.user.id,
+          slotId,
+          totalHours: expectedTotalHours,
+        })
+        // Return the original rather than an error: from the caller's point of view the
+        // request succeeded, and handing back the same order id lets an interrupted
+        // checkout resume instead of stranding a paid-for-nothing order.
+        const { payment, ...bookingOnly } = duplicate
+        return { booking: bookingOnly, razorpayOrderId: payment?.providerOrderId ?? null, duplicate: true }
+      }
+
       if (dates.length > 1 && (requestedSlotType !== 'FULLDAY' || slot.slotType !== 'FULLDAY')) {
         throw new Error('Multi-day bookings require a full-day slot')
       }
@@ -293,8 +314,7 @@ export async function POST(req: NextRequest) {
         endTime: slot.endTime,
       })
 
-      const hours: Record<string, number> = { H3: 3, H6: 6, H12: 12, FULLDAY: 24 }
-      const totalHours = (hours[slot.slotType] || 3) * dates.length
+      const totalHours = expectedTotalHours
       const slotPrices = {
         H3: slot.room.price_3h,
         H6: slot.room.price_6h,
@@ -339,7 +359,7 @@ export async function POST(req: NextRequest) {
           },
         })
       } catch (error) {
-        console.error('Razorpay order error:', error)
+        logger.error('api.bookings.razorpay_order_error', error)
         throw new Error('Payment gateway authentication failed')
       }
 
@@ -397,7 +417,7 @@ export async function POST(req: NextRequest) {
       currency: PLATFORM_CURRENCY,
     }, { status: 201 })
   } catch (err) {
-    console.error('Create booking error:', err)
+    logger.error('api.bookings.create_booking_error', err)
     if (err instanceof Error && isBookingConflict(err)) {
       return NextResponse.json(
         { error: err.message },

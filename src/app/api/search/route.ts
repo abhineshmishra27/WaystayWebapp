@@ -5,6 +5,7 @@ import { dateRangeStrings, fullDayStayDates, slotIsUnavailable } from '@/lib/boo
 import { loadChannelHolds } from '@/lib/booking-inventory-db'
 import { slotIsPastForBooking } from '@/lib/booking-time'
 import { descendantLocationIds, locationRadiusPlan } from '@/lib/location-search'
+import { logger } from '@/lib/logger'
 import {
   ROOM_SLOT_SETTING_FIELDS,
   roomAllowsSlotType,
@@ -586,7 +587,7 @@ export async function GET(req: NextRequest) {
         : null,
     })
   } catch (error) {
-    console.error('Search error:', error)
+    logger.error('api.search.search_error', error)
     return NextResponse.json({ error: 'Search failed' }, { status: 500 })
   }
 }

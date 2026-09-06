@@ -7,6 +7,7 @@ import { validatePaymentVerification } from 'razorpay/dist/utils/razorpay-utils'
 import { z } from 'zod'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const schema = z.object({
   razorpayPaymentId: z.string(),
@@ -67,12 +68,12 @@ export async function POST(req: NextRequest) {
     try {
       if (result.newlyConfirmed) await sendBookingConfirmation(result.booking)
     } catch (emailErr) {
-      console.error('Email error (non-blocking):', emailErr)
+      logger.error('api.payments.verify.email_error_non_blocking', emailErr)
     }
 
     return NextResponse.json({ success: true, bookingId })
   } catch (error) {
-    console.error('Payment verify error:', error)
+    logger.error('api.payments.verify.payment_verify_error', error)
     if (
       error instanceof Error &&
       [

@@ -6,6 +6,7 @@ import { failPendingRazorpayPayment, finalizeRazorpayPayment, getPendingRazorpay
 import { getRazorpay } from '@/lib/razorpay'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const schema = z.object({
   bookingId: z.string().min(1),
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
       try {
         await sendBookingConfirmation(result.booking)
       } catch (emailError) {
-        console.error('Reconciled cancellation confirmation email failed:', emailError)
+        logger.error('api.payments.cancel.reconciled_cancellation_confirmation_email_failed', emailError)
       }
     }
     return NextResponse.json({ success: true, released: false, confirmed: true })

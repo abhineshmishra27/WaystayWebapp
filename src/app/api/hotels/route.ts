@@ -6,6 +6,7 @@ import type { Prisma } from '@prisma/client'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { getEffectiveRole, hasPermission, PERMISSIONS, sessionHasPermission } from '@/lib/rbac'
 import { resolveLocationFromDatabase } from '@/lib/search-db'
+import { logger } from '@/lib/logger'
 
 const createHotelSchema = z.object({
   ownerId: z.string().min(1),
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ hotels: hotelsWithRating, page, limit })
   } catch (error) {
-    console.error('GET /api/hotels error:', error)
+    logger.error('api.hotels.get_api_hotels_error', error)
     return NextResponse.json({ error: 'Failed to fetch hotels' }, { status: 500 })
   }
 }
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(hotel, { status: 201 })
   } catch (error) {
-    console.error('POST /api/hotels error:', error)
+    logger.error('api.hotels.post_api_hotels_error', error)
     return NextResponse.json({ error: 'Failed to create hotel' }, { status: 500 })
   }
 }

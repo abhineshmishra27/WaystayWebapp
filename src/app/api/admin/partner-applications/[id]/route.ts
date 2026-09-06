@@ -5,6 +5,7 @@ import { requireApiPermission } from '@/lib/api-rbac'
 import { prisma } from '@/lib/db'
 import { sendPartnerApplicationDecisionEmail } from '@/lib/email'
 import { PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const APPROVAL_CONFIRMATION = 'APPROVE_OWNER_ACCOUNT'
 
@@ -67,7 +68,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         return result
       })
       sendPartnerApplicationDecisionEmail(rejected, false, parsed.data.reason).catch(error => {
-        console.error('Partner rejection email failed:', error)
+        logger.error('api.admin.partner-applications.partner_rejection_email_failed', error)
       })
       return NextResponse.json({ application: { id: rejected.id, status: rejected.status } })
     }
@@ -130,7 +131,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     })
 
     sendPartnerApplicationDecisionEmail(approved.application, true).catch(error => {
-      console.error('Partner approval email failed:', error)
+      logger.error('api.admin.partner-applications.partner_approval_email_failed', error)
     })
 
     return NextResponse.json({
@@ -138,7 +139,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       owner: approved.owner,
     })
   } catch (error) {
-    console.error('Partner application decision error:', error)
+    logger.error('api.admin.partner-applications.partner_application_decision_error', error)
     if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
       return NextResponse.json({ error: 'An account with this email address or mobile number already exists.' }, { status: 409 })
     }

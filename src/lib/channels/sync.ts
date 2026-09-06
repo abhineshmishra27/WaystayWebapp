@@ -14,6 +14,7 @@ import {
   validatePropertyForImport,
 } from '@/lib/channels/mapping'
 import type { ChannelAdapter, ExternalRoomType } from '@/lib/channels/types'
+import { logger } from '@/lib/logger'
 
 /**
  * Orchestration: transactions, persistence, holds, logging.
@@ -60,7 +61,7 @@ export async function recordSyncLog(entry: {
   } catch (error) {
     // The log is observability, not correctness - never let it fail an operation.
     // A unique-violation here is the expected outcome of a duplicate webhook.
-    console.error('Failed to write ChannelSyncLog entry:', error)
+    logger.error('lib.channels.sync.failed_to_write_channelsynclog_entry', error)
   }
 }
 

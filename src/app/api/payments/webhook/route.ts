@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { sendBookingConfirmation, sendRefundFailedAdminAlert } from '@/lib/email'
 import { finalizeRazorpayPayment, recordPaymentEvent } from '@/lib/payments'
+import { logger } from '@/lib/logger'
 
 interface WebhookPayment {
   id?: string
@@ -96,11 +97,11 @@ export async function POST(req: NextRequest) {
         try {
           await sendBookingConfirmation(result.booking)
         } catch (emailError) {
-          console.error('Webhook confirmation email error:', emailError)
+          logger.error('api.payments.webhook.webhook_confirmation_email_error', emailError)
         }
       }
     } catch (error) {
-      console.error('Razorpay webhook finalization error:', error)
+      logger.error('api.payments.webhook.razorpay_webhook_finalization_error', error)
       await prisma.webhookEvent.update({
         where: { id: webhookEvent.id },
         data: { outcome: 'error', errorMessage: error instanceof Error ? error.message : 'Unknown error' },
@@ -210,7 +211,7 @@ async function handleRefundEvent(event: string, refund: WebhookRefund | undefine
       })
     })
 
-    console.error(`Razorpay refund failed for payment ${payment.id} (booking ${payment.bookingId}) — was ${previousStatus}`)
+    logger.error('api.payments.webhook.refund_failed', undefined, { paymentId: payment.id, bookingId: payment.bookingId, previousStatus })
     try {
       await sendRefundFailedAdminAlert({
         bookingId: payment.bookingId,
@@ -223,7 +224,7 @@ async function handleRefundEvent(event: string, refund: WebhookRefund | undefine
         reason: refund.status ?? null,
       })
     } catch (emailError) {
-      console.error('Refund-failed admin alert email error:', emailError)
+      logger.error('api.payments.webhook.refund_failed_admin_alert_email_error', emailError)
     }
   }
 

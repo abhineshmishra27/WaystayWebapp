@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rateLimit } from '@/lib/rate-limit'
 import { normalizeLocationQuery } from '@/lib/location-search'
 import { suggestSearchPlaces } from '@/lib/search-db'
+import { logger } from '@/lib/logger'
 
 export async function GET(req: NextRequest) {
   try {
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
       { headers: { 'Cache-Control': 'public, max-age=30, stale-while-revalidate=120' } },
     )
   } catch (error) {
-    console.error('Location suggestion error:', error)
+    logger.error('api.locations.suggest.location_suggestion_error', error)
     return NextResponse.json({ error: 'Unable to load location suggestions' }, { status: 500 })
   }
 }

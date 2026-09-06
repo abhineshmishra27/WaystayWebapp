@@ -5,6 +5,7 @@ import { requireApiPermission } from '@/lib/api-rbac'
 import { prisma } from '@/lib/db'
 import { sendHotelListingRequestDecisionEmail } from '@/lib/email'
 import { PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const decisionSchema = z.discriminatedUnion('action', [
   z.object({
@@ -76,7 +77,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     })
 
     sendHotelListingRequestDecisionEmail(updated, nextStatus === 'REVIEWED', parsed.data.reason).catch(error => {
-      console.error('Hotel listing request decision email failed:', error)
+      logger.error('api.admin.hotel-listing-requests.hotel_listing_request_decision_email_failed', error)
     })
 
     return NextResponse.json({ request: { id: updated.id, status: updated.status } })
@@ -84,7 +85,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (error instanceof Error && error.message === 'REQUEST_ALREADY_REVIEWED') {
       return NextResponse.json({ error: 'This hotel request has already been reviewed.' }, { status: 409 })
     }
-    console.error('Hotel listing request decision error:', error)
+    logger.error('api.admin.hotel-listing-requests.hotel_listing_request_decision_error', error)
     return NextResponse.json({ error: 'The hotel listing request could not be updated.' }, { status: 500 })
   }
 }

@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { prisma } from '@/lib/db'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const settingsSchema = z.object({
   threeHourEnabled: z.boolean().optional(),
@@ -51,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ro
 
     return NextResponse.json({ room: updatedRoom })
   } catch (error) {
-    console.error('Room stay-option update error:', error)
+    logger.error('api.owner.rooms.slot-settings.room_stay_option_update_error', error)
     return NextResponse.json({ error: 'Unable to update room stay options' }, { status: 500 })
   }
 }

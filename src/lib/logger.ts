@@ -92,9 +92,15 @@ function emit(level: LogLevel, event: string, context?: LogContext, error?: unkn
   else console.log(line)
 }
 
+/**
+ * `warn` and `error` share an argument order on purpose. They previously mirrored each
+ * other - (event, context, error) against (event, error, context) - which reads fine at
+ * the definition and is a trap at the call site: passing the two the wrong way round is
+ * silent, and the error ends up logged as context with its message stripped.
+ */
 export const logger = {
   debug: (event: string, context?: LogContext) => emit('debug', event, context),
   info: (event: string, context?: LogContext) => emit('info', event, context),
-  warn: (event: string, context?: LogContext, error?: unknown) => emit('warn', event, context, error),
+  warn: (event: string, error?: unknown, context?: LogContext) => emit('warn', event, context, error),
   error: (event: string, error?: unknown, context?: LogContext) => emit('error', event, context, error),
 }

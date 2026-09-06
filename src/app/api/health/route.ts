@@ -26,7 +26,7 @@ export async function GET() {
     // Slow but working is the interesting signal - it usually means the serverless
     // database was suspended and is waking up.
     if (latencyMs > 2000) {
-      logger.warn('health.database.slow', { latencyMs })
+      logger.warn('health.database.slow', undefined, { latencyMs })
     }
 
     return NextResponse.json(

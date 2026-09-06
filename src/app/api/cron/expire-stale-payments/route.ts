@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { sendBookingConfirmation } from '@/lib/email'
 import { failPendingRazorpayPayment, finalizeRazorpayPayment } from '@/lib/payments'
 import { getRazorpay } from '@/lib/razorpay'
+import { logger } from '@/lib/logger'
 
 const DEFAULT_EXPIRY_MINUTES = 20
 
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
           try {
             await sendBookingConfirmation(result.booking)
           } catch (emailError) {
-            console.error(`Confirmation email failed for reconciled booking ${booking.id}:`, emailError)
+            logger.error('api.cron.expire_stale_payments.confirmation_email_failed', emailError, { bookingId: booking.id })
           }
         }
         continue
@@ -70,7 +71,7 @@ export async function GET(req: NextRequest) {
       if (released) expired++
     } catch (error) {
       failed++
-      console.error(`Failed to expire stale booking ${booking.id}:`, error)
+      logger.error('api.cron.expire_stale_payments.booking_expiry_failed', error, { bookingId: booking.id })
     }
   }
 
