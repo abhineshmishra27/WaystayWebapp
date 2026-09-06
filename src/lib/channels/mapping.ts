@@ -5,11 +5,18 @@
  * can be tested against captured fixtures without a network or a database.
  */
 
+import { PLATFORM_CURRENCY } from '@/lib/money'
 import type { ExternalAvailability, ExternalProperty, ExternalRoomType } from '@/lib/channels/types'
 
 /** WayStay operates on IST date strings; see todayInIndia() in src/lib/booking-time.ts. */
 export const SUPPORTED_TIMEZONE = 'Asia/Kolkata'
-export const SUPPORTED_CURRENCY = 'INR'
+/**
+ * Re-exported from the platform constant rather than restated. The currency a property
+ * must quote in and the currency bookings are charged in are the same fact, and an
+ * importer that disagreed with the payment path would admit properties that could
+ * never be billed correctly.
+ */
+export const SUPPORTED_CURRENCY = PLATFORM_CURRENCY
 
 export type ImportRejection = {
   reason: string

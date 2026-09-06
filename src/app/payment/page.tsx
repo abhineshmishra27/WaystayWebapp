@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import toast, { Toaster } from 'react-hot-toast'
+import { PLATFORM_CURRENCY } from '@/lib/money'
 
 interface RazorpayResponse {
   razorpay_payment_id: string
@@ -230,7 +231,7 @@ function PaymentDetails() {
       const checkout = new window.Razorpay({
         key: razorpayKey,
         amount: bookingData.amount,
-        currency: bookingData.currency || 'INR',
+        currency: bookingData.currency || PLATFORM_CURRENCY,
         name: 'WayStayy',
         description: `${SLOT_LABELS[slotType] || 'Hotel'} booking`,
         order_id: bookingData.razorpayOrderId,
