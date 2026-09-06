@@ -27,8 +27,22 @@ function resolveSourceFile(basePath) {
   return null
 }
 
+/**
+ * Modules replaced during route tests, opted into with WAYSTAY_TEST_STUBS=1.
+ *
+ * Only `@/lib/auth` is swapped, and only for the session: the real module needs NextAuth
+ * with a request context and a signed cookie, which route tests are not trying to
+ * re-test. Everything else - permissions, Prisma, the handlers themselves - stays real,
+ * because those are what the tests exist to check.
+ */
+const TEST_STUBS = new Map([['@/lib/auth', resolvePath(projectRoot, 'tests/support/auth-stub.mts')]])
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (process.env.WAYSTAY_TEST_STUBS === '1') {
+      const stub = TEST_STUBS.get(specifier)
+      if (stub) return nextResolve(pathToFileURL(stub).href, context)
+    }
     if (specifier === '@' || specifier.startsWith('@/')) {
       const basePath = resolvePath(sourceRoot, specifier === '@' ? '' : specifier.slice(2))
       const resolved = resolveSourceFile(basePath)
