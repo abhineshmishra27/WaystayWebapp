@@ -133,6 +133,7 @@ export async function GET(req: NextRequest) {
           },
         })
       : []
+    const locationById = new Map(locations.map(location => [location.id, location]))
     const selectedLocation = locationId ? locations.find(location => location.id === locationId) : null
     if (locationId && !selectedLocation) {
       return NextResponse.json({ error: 'Unknown locationId' }, { status: 400 })
@@ -234,14 +235,11 @@ export async function GET(req: NextRequest) {
           : {}),
       },
       include: {
-        images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-        location: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-          },
-        },
+        // Images and the Location join are deliberately absent. Rooms are needed for
+        // every candidate because availability and pricing decide who is in the
+        // results at all, but a thumbnail is only ever shown for the page being
+        // returned - so it is fetched after pagination, for those hotels only.
+        // Location is resolved from the `locations` already in memory.
         rooms: {
           where: roomWhere,
           select: {
@@ -460,6 +458,10 @@ export async function GET(req: NextRequest) {
         reviewConfidence: reviewConfidence(reviewCount),
         bookingPopularity: bookingPopularity(bookingCount, highestBookingCount),
       })
+      // Resolved from the locations already in memory rather than a join on every
+      // candidate row. Only populated when a location query was made, which is also
+      // the only branch below that reads it.
+      const hotelLocation = hotel.locationId ? locationById.get(hotel.locationId) : undefined
       const relevanceReasons: string[] = []
 
       if (hasCoords && distance !== null) {
@@ -476,10 +478,10 @@ export async function GET(req: NextRequest) {
           )
         } else if (
           target.type === 'CITY'
-          && hotel.location?.type === 'LOCALITY'
-          && matchingLocationIds.has(hotel.location.id)
+          && hotelLocation?.type === 'LOCALITY'
+          && matchingLocationIds.has(hotelLocation.id)
         ) {
-          relevanceReasons.push(`In ${hotel.location.name}`)
+          relevanceReasons.push(`In ${hotelLocation.name}`)
         } else if (distance !== null) {
           relevanceReasons.push(`${relevanceDistance(distance)} from ${target.name}`)
         }
@@ -510,6 +512,21 @@ export async function GET(req: NextRequest) {
     const totalCount = filteredHotels.length
     const paginatedHotels = filteredHotels.slice(skip, skip + limit)
 
+    // Thumbnails for the page being returned only. Ranking needs rooms for every
+    // candidate, but nothing needs an image until a hotel has earned a place on the
+    // page, so this scales with page size rather than with the candidate pool.
+    const imageByHotelId = new Map<string, string>()
+    if (paginatedHotels.length > 0) {
+      const images = await prisma.hotelImage.findMany({
+        where: { hotelId: { in: paginatedHotels.map(hotel => hotel.id) } },
+        select: { hotelId: true, url: true, sortOrder: true },
+        orderBy: { sortOrder: 'asc' },
+      })
+      for (const image of images) {
+        if (!imageByHotelId.has(image.hotelId)) imageByHotelId.set(image.hotelId, image.url)
+      }
+    }
+
     const result = paginatedHotels.map(hotel => {
       const selectedSlotPrice = lowestRoomPrice(hotel.rooms, slotType ?? 'H3')
       const hourlyPrices = hotel.rooms.map(room => room.pricePerHour)
@@ -529,7 +546,7 @@ export async function GET(req: NextRequest) {
       distanceKm: distanceByHotelId.has(hotel.id) ? Number((distanceByHotelId.get(hotel.id) || 0).toFixed(1)) : null,
       lat: hotel.lat,
       lng: hotel.lng,
-      image: hotel.images[0]?.url || null,
+      image: imageByHotelId.get(hotel.id) ?? null,
       avgRating: ratingByHotelId.get(hotel.id) ?? 0,
       reviewCount: reviewStatsByHotelId.get(hotel.id)?.count || hotel.total_review,
       pricePerHour: hourlyPrices.length > 0 ? Math.min(...hourlyPrices) : null,
