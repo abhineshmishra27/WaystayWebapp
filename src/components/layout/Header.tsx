@@ -19,6 +19,8 @@ export default function Header() {
   const returnTo = encodeURIComponent(authDestination)
   const hasOwnerAccess = hasPermission(session?.user.role, PERMISSIONS.OWNER_ACCESS)
   const hasAdminAccess = hasPermission(session?.user.role, PERMISSIONS.ADMIN_ACCESS)
+  const isLandingPage = pathname === '/'
+  const partnerDestination = hasOwnerAccess ? '/owner/hotels' : '/partner'
 
   useEffect(() => {
     if (!menuOpen) return
@@ -42,8 +44,6 @@ export default function Header() {
     }
   }, [menuOpen])
 
-  if (pathname === '/') return null
-
   if (pathname.startsWith('/partner')) {
     return (
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
@@ -58,14 +58,26 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        <BrandLogo className="flex items-center gap-2 shrink-0" />
+    <header className={isLandingPage ? 'ws-landing-header relative z-40' : 'sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur'}>
+      <div className={`${isLandingPage ? 'ws-landing-header-inner' : 'max-w-6xl px-4 py-3'} mx-auto flex items-center justify-between gap-4`}>
+        <BrandLogo
+          className={`flex shrink-0 items-center ${isLandingPage ? 'ws-landing-brand gap-4' : 'gap-2'}`}
+          imageClassName={isLandingPage ? 'ws-landing-logo w-auto' : 'h-9 w-auto'}
+          textClassName={isLandingPage ? 'ws-landing-wordmark font-normal tracking-tight' : 'text-xl font-normal tracking-tight'}
+        />
 
         <nav className="flex items-center gap-2 sm:gap-3">
+          {isLandingPage && (
+            <div className="hidden items-center gap-3 md:flex lg:gap-7">
+              <Link href="#offers" className="rounded-lg px-2 py-2 text-sm font-bold transition hover:text-[var(--waystay-orange-dark)] lg:text-base">Offers</Link>
+              <Link href="#trust" className="rounded-lg px-2 py-2 text-sm font-bold transition hover:text-[var(--waystay-orange-dark)] lg:text-base">Why travellers trust us</Link>
+              <Link href={partnerDestination} className="rounded-lg px-2 py-2 text-sm font-bold transition hover:text-[var(--waystay-orange-dark)] lg:text-base">List your business</Link>
+            </div>
+          )}
           {!session ? (
-            <Link href={`/login?returnTo=${returnTo}`} className="rounded-lg bg-[var(--waystay-orange)] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--waystay-orange-dark)]">
-              Sign in / Sign up
+            <Link href={`/login?returnTo=${returnTo}`} className={`${isLandingPage ? 'border border-slate-300 bg-white text-[var(--waystay-blue)] hover:border-[var(--waystay-orange)]' : 'bg-[var(--waystay-orange)] text-white hover:bg-[var(--waystay-orange-dark)]'} inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold shadow-sm transition`}>
+              {isLandingPage && <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current"><circle cx="12" cy="8" r="4" strokeWidth="1.8" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" strokeWidth="1.8" strokeLinecap="round" /></svg>}
+              {isLandingPage ? 'Log in' : 'Sign in / Sign up'}
             </Link>
           ) : (
             <div className="relative" ref={menuRef}>
