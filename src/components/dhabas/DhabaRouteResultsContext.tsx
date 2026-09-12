@@ -44,13 +44,16 @@ type StoredRouteResult = {
 
 type DhabaRouteResultsContextValue = {
   getRouteResult: (query: string) => DhabaRouteResult | null
+  getCurrentRouteResult: () => StoredRouteResult | null
   setRouteResult: (query: string, result: DhabaRouteResult) => void
 }
 
 const DhabaRouteResultsContext = createContext<DhabaRouteResultsContextValue | null>(null)
 
 function normaliseQuery(query: string) {
-  return query.replace(/^\?/, '')
+  const params = new URLSearchParams(query.replace(/^\?/, ''))
+  params.sort()
+  return params.toString()
 }
 
 /**
@@ -65,12 +68,14 @@ export function DhabaRouteResultsProvider({ children }: { children: ReactNode })
     return current?.query === normaliseQuery(query) ? current.result : null
   }, [])
 
+  const getCurrentRouteResult = useCallback(() => currentResult.current, [])
+
   const setRouteResult = useCallback((query: string, result: DhabaRouteResult) => {
     currentResult.current = { query: normaliseQuery(query), result }
   }, [])
 
   return (
-    <DhabaRouteResultsContext.Provider value={{ getRouteResult, setRouteResult }}>
+    <DhabaRouteResultsContext.Provider value={{ getRouteResult, getCurrentRouteResult, setRouteResult }}>
       {children}
     </DhabaRouteResultsContext.Provider>
   )

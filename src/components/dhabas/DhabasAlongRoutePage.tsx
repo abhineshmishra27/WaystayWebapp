@@ -11,13 +11,16 @@ function routeLabel(result: DhabaRouteResult | null) {
   return `${result.route.from.name} to ${result.route.to.name}`
 }
 
-function distanceLabel(dhaba: RouteDhaba) {
+function distanceLabel(dhaba: RouteDhaba, nearby: boolean) {
+  if (nearby) {
+    return dhaba.detourKm < 1 ? `${Math.max(50, Math.round(dhaba.detourKm * 1_000))} m away` : `${dhaba.detourKm.toFixed(1)} km away`
+  }
   const minutes = dhaba.minutesAhead > 0 ? `${dhaba.minutesAhead} min ahead` : 'At your starting point'
   const detour = dhaba.detourKm > 0 ? `${dhaba.detourKm.toFixed(1)} km detour` : 'On route'
   return `${minutes} · ${detour}`
 }
 
-function DhabaResultCard({ dhaba }: { dhaba: RouteDhaba }) {
+function DhabaResultCard({ dhaba, nearby }: { dhaba: RouteDhaba; nearby: boolean }) {
   const isGooglePlace = dhaba.source === 'google'
   return (
     <article className="dhaba-result-card">
@@ -43,7 +46,7 @@ function DhabaResultCard({ dhaba }: { dhaba: RouteDhaba }) {
           <h2>{dhaba.name}</h2>
           <span className="dhaba-result-rating" aria-label={`${dhaba.rating} out of 5 from ${dhaba.reviewCount} reviews`}>★ {dhaba.rating.toFixed(1)} <small>({dhaba.reviewCount})</small></span>
         </div>
-        <p className="dhaba-result-distance">{distanceLabel(dhaba)}</p>
+        <p className="dhaba-result-distance">{distanceLabel(dhaba, nearby)}</p>
         {dhaba.address && <p className="dhaba-result-address">{dhaba.address}</p>}
         <div className="dhaba-result-tags">{dhaba.tags.map(tag => <span key={tag}>{tag}</span>)}</div>
         {dhaba.mapsUri && <a className="dhaba-result-maps" href={dhaba.mapsUri} target="_blank" rel="noreferrer">Open in Google Maps <span aria-hidden="true">↗</span></a>}
@@ -114,6 +117,7 @@ export default function DhabasAlongRoutePage({ query }: { query: string }) {
   }
 
   const message = query ? error : 'Choose a route first to see dhabas along the way.'
+  const nearby = result?.mode === 'nearby'
 
   return (
     <main className="dhaba-results-page">
@@ -121,18 +125,19 @@ export default function DhabasAlongRoutePage({ query }: { query: string }) {
         <Link className="dhaba-results-back" href="/">← Change route</Link>
 
         <header className="dhaba-results-header">
-          <p>Food stops on your journey</p>
-          <h1>All food stops along {routeLabel(result)}</h1>
+          <p>{nearby ? 'Food stops near you' : 'Food stops on your journey'}</p>
+          <h1>{nearby ? 'Food stops within 5 km' : `All food stops along ${routeLabel(result)}`}</h1>
           {result?.route && <span>{result.route.highway} · {result.route.distanceKm} km · Within 1 km of the driving route</span>}
+          {nearby && <span>Within 5 km of your selected location</span>}
         </header>
 
         {result?.dhabaNotice && <p className="dhaba-results-notice">{result.dhabaNotice}</p>}
         {loading && <div className="dhaba-results-loading" aria-label="Loading dhabas"><span /><span /><span /></div>}
         {!loading && message && <div className="dhaba-results-empty"><p>{message}</p><Link href="/">Find a route</Link></div>}
-        {!loading && !message && result?.dhabas.length === 0 && !result.dhabaPagination?.nextPageToken && <div className="dhaba-results-empty"><p>No food stops were found within 1 km of this route.</p><Link href="/">Try another route</Link></div>}
+        {!loading && !message && result?.dhabas.length === 0 && !result.dhabaPagination?.nextPageToken && <div className="dhaba-results-empty"><p>{nearby ? 'No food stops were found within 5 km of this location.' : 'No food stops were found within 1 km of this route.'}</p><Link href="/">Try another route</Link></div>}
         {!loading && !message && (result?.dhabas.length ?? 0) > 0 && (
-          <section className="dhaba-results-grid" aria-label="All food stops on this route">
-            {result!.dhabas.map(dhaba => <DhabaResultCard key={dhaba.id} dhaba={dhaba} />)}
+          <section className="dhaba-results-grid" aria-label={nearby ? 'All food stops near you' : 'All food stops on this route'}>
+            {result!.dhabas.map(dhaba => <DhabaResultCard key={dhaba.id} dhaba={dhaba} nearby={nearby} />)}
           </section>
         )}
         {!loading && !message && result?.dhabaPagination?.nextPageToken && (
