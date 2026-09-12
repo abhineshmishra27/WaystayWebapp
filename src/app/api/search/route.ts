@@ -525,13 +525,21 @@ export async function GET(req: NextRequest) {
     filteredHotels.sort((first, second) => {
       const firstRanking = rankingByHotelId.get(first.id)!
       const secondRanking = rankingByHotelId.get(second.id)!
-      if (firstRanking.relevanceScore !== secondRanking.relevanceScore) {
-        return secondRanking.relevanceScore - firstRanking.relevanceScore
-      }
+      const ratingDifference = (ratingByHotelId.get(second.id) ?? 0) - (ratingByHotelId.get(first.id) ?? 0)
+      if (ratingDifference !== 0) return ratingDifference
+
       const distanceDifference = (distanceByHotelId.get(first.id) ?? Infinity)
         - (distanceByHotelId.get(second.id) ?? Infinity)
       if (distanceDifference !== 0) return distanceDifference
-      return secondRanking.bayesianRating - firstRanking.bayesianRating
+
+      const reviewDifference = (reviewStatsByHotelId.get(second.id)?.count ?? second.total_review)
+        - (reviewStatsByHotelId.get(first.id)?.count ?? first.total_review)
+      if (reviewDifference !== 0) return reviewDifference
+
+      if (firstRanking.relevanceScore !== secondRanking.relevanceScore) {
+        return secondRanking.relevanceScore - firstRanking.relevanceScore
+      }
+      return first.name.localeCompare(second.name)
     })
 
     const totalCount = filteredHotels.length

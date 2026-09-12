@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { defaultSearchDateForSlot } from '@/lib/booking-time'
 import GooglePlacePhoto from '@/components/dhabas/GooglePlacePhoto'
+import { useDhabaRouteResults, type RouteDhaba } from '@/components/dhabas/DhabaRouteResultsContext'
 
 type DiscoveryMode = 'all' | 'stays' | 'dhabas'
 type SearchScope = 'route' | 'nearby'
@@ -12,6 +13,11 @@ type SearchScope = 'route' | 'nearby'
 type EndpointValue = {
   text: string
   locationId: string
+}
+
+type NearbyCoordinates = {
+  latitude: number
+  longitude: number
 }
 
 type LocationSuggestion = {
@@ -36,25 +42,6 @@ type RouteStay = {
   minutesAhead: number
 }
 
-type RouteDhaba = {
-  id: string
-  hotelId: string | null
-  name: string
-  address: string | null
-  image: string | null
-  photoName: string | null
-  photoAttributions: Array<{ displayName: string; uri: string | null }>
-  rating: number
-  reviewCount: number
-  startingPrice: number | null
-  tags: string[]
-  detourKm: number
-  minutesAhead: number
-  mapsUri: string | null
-  websiteUri: string | null
-  source: 'google' | 'waystay'
-}
-
 type RouteResult = {
   mode: SearchScope
   route: null | {
@@ -69,6 +56,7 @@ type RouteResult = {
   dhabas: RouteDhaba[]
   dhabaProvider?: 'google' | 'waystay'
   dhabaNotice?: string | null
+  dhabaPagination?: { nextPageToken: string | null }
 }
 
 const categoryOptions: Array<{ id: DiscoveryMode; label: string; hint: string; icon: string }> = [
@@ -169,7 +157,10 @@ function addOneDay(date: string) {
   return new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)
 }
 
-function distanceLabel(minutesAhead: number, detourKm: number) {
+function distanceLabel(minutesAhead: number, detourKm: number, nearby = false) {
+  if (nearby) {
+    return detourKm < 1 ? `${Math.max(50, Math.round(detourKm * 1_000))} m away` : `${detourKm.toFixed(1)} km away`
+  }
   const timing = minutesAhead <= 5 ? 'At your starting point' : `${minutesAhead} min ahead`
   const detour = detourKm < 1 ? 'Direct access' : `${Math.max(1, Math.round(detourKm))} km detour`
   return `${timing} · ${detour}`
@@ -271,7 +262,7 @@ function RouteLocationField({ label, value, onChange }: {
   )
 }
 
-function StayCard({ stay, date }: { stay: RouteStay; date: string }) {
+function StayCard({ stay, date, nearby }: { stay: RouteStay; date: string; nearby: boolean }) {
   const isNight = stay.availableStayType === 'FULLDAY'
   return (
     <article className="ws-card">
@@ -283,7 +274,7 @@ function StayCard({ stay, date }: { stay: RouteStay; date: string }) {
           <h4>{stay.name}</h4>
           <span aria-label={`${stay.avgRating} out of 5, ${stay.reviewCount} reviews`}><i>★</i> {Number(stay.avgRating || 0).toFixed(1)} <small>({stay.reviewCount})</small></span>
         </div>
-        <p className="ws-distance"><Icon name="pin" />{distanceLabel(stay.minutesAhead, stay.detourKm)}</p>
+        <p className="ws-distance"><Icon name="pin" />{distanceLabel(stay.minutesAhead, stay.detourKm, nearby)}</p>
         <div className="ws-tags"><span className="ws-tag-stay">{isNight ? 'Overnight' : '3-hour stay'}</span></div>
         <div className="ws-card-bottom">
           <p className="ws-price">{formatPrice(stay.selectedSlotPrice)} <small>/ {isNight ? 'night' : '3 hours'}</small></p>
@@ -294,7 +285,7 @@ function StayCard({ stay, date }: { stay: RouteStay; date: string }) {
   )
 }
 
-function DhabaCard({ dhaba, index, date }: { dhaba: RouteDhaba; index: number; date: string }) {
+function DhabaCard({ dhaba, index, date, nearby }: { dhaba: RouteDhaba; index: number; date: string; nearby: boolean }) {
   const isGooglePlace = dhaba.source === 'google'
   return (
     <article className="ws-card">
@@ -318,7 +309,7 @@ function DhabaCard({ dhaba, index, date }: { dhaba: RouteDhaba; index: number; d
           <h4>{dhaba.name}</h4>
           <span aria-label={`${dhaba.rating} out of 5, ${dhaba.reviewCount} reviews`}><i>★</i> {Number(dhaba.rating || 0).toFixed(1)} <small>({dhaba.reviewCount})</small></span>
         </div>
-        <p className="ws-distance"><Icon name="pin" />{distanceLabel(dhaba.minutesAhead, dhaba.detourKm)}</p>
+        <p className="ws-distance"><Icon name="pin" />{distanceLabel(dhaba.minutesAhead, dhaba.detourKm, nearby)}</p>
         {isGooglePlace && dhaba.address && <p className="ws-dhaba-address">{dhaba.address}</p>}
         <div className="ws-tags">{dhaba.tags.map(tag => <span key={tag}>{tag}</span>)}</div>
         <div className="ws-card-bottom is-link-only">
@@ -353,7 +344,13 @@ function CardRail({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function routeQuery(from: EndpointValue, to: EndpointValue, date: string, mode: SearchScope) {
+function routeQuery(
+  from: EndpointValue,
+  to: EndpointValue,
+  date: string,
+  mode: SearchScope,
+  nearbyCoordinates: NearbyCoordinates | null = null,
+) {
   const params = new URLSearchParams({ date, mode })
   if (mode === 'route') {
     params.set('from', from.text)
@@ -363,33 +360,80 @@ function routeQuery(from: EndpointValue, to: EndpointValue, date: string, mode: 
   } else {
     params.set('near', from.text)
     if (from.locationId) params.set('nearLocationId', from.locationId)
+    if (nearbyCoordinates) {
+      params.set('lat', String(nearbyCoordinates.latitude))
+      params.set('lng', String(nearbyCoordinates.longitude))
+    }
   }
   return params
 }
 
+function searchFormFromQuery(query: string | null) {
+  const params = new URLSearchParams(query ?? '')
+  const mode: SearchScope = params.get('mode') === 'nearby' ? 'nearby' : 'route'
+  const defaultDate = defaultSearchDateForSlot('H3')
+  const latitude = Number(params.get('lat'))
+  const longitude = Number(params.get('lng'))
+  const nearbyCoordinates = mode === 'nearby'
+    && Number.isFinite(latitude)
+    && Number.isFinite(longitude)
+    && latitude >= -90
+    && latitude <= 90
+    && longitude >= -180
+    && longitude <= 180
+    ? { latitude, longitude }
+    : null
+  const from = mode === 'route'
+    ? { text: params.get('from') || 'Delhi', locationId: params.get('fromLocationId') || '' }
+    : { text: params.get('near') || 'Delhi', locationId: params.get('nearLocationId') || '' }
+
+  return {
+    mode,
+    from,
+    to: { text: params.get('to') || 'Jaipur', locationId: params.get('toLocationId') || '' },
+    date: params.get('date') || defaultDate,
+    nearbyCoordinates,
+  }
+}
+
 export default function RouteExplorerHomepage() {
+  const { getCurrentRouteResult, setRouteResult: cacheDhabaRouteResult } = useDhabaRouteResults()
+  const [initialState] = useState(() => {
+    const cachedRoute = getCurrentRouteResult()
+    return {
+      cachedRoute,
+      search: searchFormFromQuery(cachedRoute?.query ?? null),
+    }
+  })
+  const initialCachedRoute = initialState.cachedRoute
+  const initialSearch = initialState.search
   const [category, setCategory] = useState<DiscoveryMode>('all')
-  const [mode, setMode] = useState<SearchScope>('route')
-  const [from, setFrom] = useState<EndpointValue>({ text: 'Delhi', locationId: '' })
-  const [to, setTo] = useState<EndpointValue>({ text: 'Jaipur', locationId: '' })
-  const [date, setDate] = useState(() => defaultSearchDateForSlot('H3'))
-  const [result, setResult] = useState<RouteResult | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [mode, setMode] = useState<SearchScope>(initialSearch.mode)
+  const [from, setFrom] = useState<EndpointValue>(initialSearch.from)
+  const [to, setTo] = useState<EndpointValue>(initialSearch.to)
+  const [date, setDate] = useState(initialSearch.date)
+  const [nearbyCoordinates, setNearbyCoordinates] = useState<NearbyCoordinates | null>(initialSearch.nearbyCoordinates)
+  const [result, setResult] = useState<RouteResult | null>(() => initialCachedRoute?.result as RouteResult ?? null)
+  const [loading, setLoading] = useState(() => !initialCachedRoute)
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
+    if (result) return
+
     const controller = new AbortController()
     const params = routeQuery(
-      { text: 'Delhi', locationId: '' },
-      { text: 'Jaipur', locationId: '' },
-      defaultSearchDateForSlot('H3'),
-      'route',
+      initialSearch.from,
+      initialSearch.to,
+      initialSearch.date,
+      initialSearch.mode,
+      initialSearch.nearbyCoordinates,
     )
     fetch(`/api/route-stops?${params}`, { signal: controller.signal, cache: 'no-store' })
       .then(response => response.json().then(payload => ({ response, payload })))
       .then(({ response, payload }) => {
         if (!response.ok) throw new Error(payload.error || 'Unable to load route stops.')
         setResult(payload)
+        cacheDhabaRouteResult(params.toString(), payload)
       })
       .catch(error => {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
@@ -400,21 +444,24 @@ export default function RouteExplorerHomepage() {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [])
+  }, [cacheDhabaRouteResult, initialSearch, result])
 
-  async function search(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!from.text.trim() || (mode === 'route' && !to.text.trim())) {
-      setNotice(mode === 'route' ? 'Enter both a starting point and destination.' : 'Enter an area to search nearby.')
-      return
-    }
+  async function runSearch(
+    nextFrom: EndpointValue,
+    nextTo: EndpointValue,
+    nextDate: string,
+    nextMode: SearchScope,
+    nextNearbyCoordinates: NearbyCoordinates | null,
+  ) {
     setLoading(true)
     setNotice('')
     try {
-      const response = await fetch(`/api/route-stops?${routeQuery(from, to, date, mode)}`, { cache: 'no-store' })
+      const params = routeQuery(nextFrom, nextTo, nextDate, nextMode, nextNearbyCoordinates)
+      const response = await fetch(`/api/route-stops?${params}`, { cache: 'no-store' })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Unable to load route stops.')
       setResult(payload)
+      cacheDhabaRouteResult(params.toString(), payload)
       document.getElementById('ws-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to load route stops.')
@@ -423,12 +470,52 @@ export default function RouteExplorerHomepage() {
     }
   }
 
+  async function search(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!from.text.trim() || (mode === 'route' && !to.text.trim())) {
+      setNotice(mode === 'route' ? 'Enter both a starting point and destination.' : 'Enter an area to search nearby.')
+      return
+    }
+    await runSearch(from, to, date, mode, nearbyCoordinates)
+  }
+
+  function findNearMe() {
+    setMode('nearby')
+    setCategory('all')
+    if (!navigator.geolocation) {
+      setNearbyCoordinates(null)
+      setNotice('This browser cannot access your location. Enter an area to search nearby food stops.')
+      return
+    }
+
+    setLoading(true)
+    setNotice('Getting your location…')
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        const coordinates = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        }
+        const currentLocation = { text: 'Your current location', locationId: '' }
+        setFrom(currentLocation)
+        setNearbyCoordinates(coordinates)
+        void runSearch(currentLocation, to, date, 'nearby', coordinates)
+      },
+      () => {
+        setLoading(false)
+        setNearbyCoordinates(null)
+        setNotice('Location access was not available. Enter an area to search nearby food stops.')
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
+    )
+  }
+
   const showStays = category !== 'dhabas'
   const showDhabas = category !== 'stays'
   const visibleStays = (result?.stays ?? []).slice(0, 10)
   const allStaysHref = `/hotels?slot=H3&startDate=${date}&endDate=${date}`
   const visibleDhabas = (result?.dhabas ?? []).slice(0, 10)
-  const allDhabasHref = `/dhabas?${routeQuery(from, to, date, mode).toString()}`
+  const allDhabasHref = `/dhabas?${routeQuery(from, to, date, mode, nearbyCoordinates).toString()}`
   const displayedRoute = result?.route
   const messages = [
     notice,
@@ -458,17 +545,24 @@ export default function RouteExplorerHomepage() {
 
         <form onSubmit={search}>
           <div className={`ws-fields ${mode === 'nearby' ? 'ws-nearby-fields' : ''}`}>
-            <RouteLocationField label={mode === 'route' ? 'From' : 'Near'} value={from} onChange={setFrom} />
+            <RouteLocationField
+              label={mode === 'route' ? 'From' : 'Near'}
+              value={from}
+              onChange={value => {
+                setFrom(value)
+                if (mode === 'nearby') setNearbyCoordinates(null)
+              }}
+            />
             {mode === 'route' && <RouteLocationField label="To" value={to} onChange={setTo} />}
             <label className="ws-date-field"><span>DATE</span><input aria-label="Travel date" type="date" min={defaultSearchDateForSlot('H3')} value={date} onChange={event => setDate(event.target.value)} /></label>
             <button className="ws-primary" type="submit" disabled={loading}>{loading ? 'Finding stops…' : mode === 'route' ? 'Explore my route' : 'Find nearby stops'}<Icon name="arrow" /></button>
           </div>
           <div className="ws-modes">
             <div role="group" aria-label="Search mode">
-              <button type="button" aria-pressed={mode === 'route'} onClick={() => setMode('route')}><Icon name="pin" />Along my route</button>
-              <button type="button" aria-pressed={mode === 'nearby'} onClick={() => setMode('nearby')}><Icon name="target" />Near me</button>
+              <button type="button" aria-pressed={mode === 'route'} onClick={() => { setMode('route'); setNearbyCoordinates(null) }}><Icon name="pin" />Along my route</button>
+              <button type="button" aria-pressed={mode === 'nearby'} onClick={findNearMe}><Icon name="target" />Near me</button>
             </div>
-            <span>Live availability · Route distances are estimates</span>
+            <span>{mode === 'nearby' ? 'Food stops within 5 km of your location' : 'Live availability · Route distances are estimates'}</span>
           </div>
         </form>
       </section>
@@ -491,7 +585,7 @@ export default function RouteExplorerHomepage() {
                   <h3><span className="ws-icon ws-stays"><Icon name="bed" /></span><span>Stay for a while<small>Book by the hour or overnight</small></span></h3>
                   <Link href={allStaysHref}>View all stays<Icon name="arrow" /></Link>
                 </div>
-                <CardRail label="stays along this route">{visibleStays.map(stay => <StayCard key={stay.id} stay={stay} date={date} />)}</CardRail>
+                <CardRail label={mode === 'nearby' ? 'stays near you' : 'stays along this route'}>{visibleStays.map(stay => <StayCard key={stay.id} stay={stay} date={date} nearby={mode === 'nearby'} />)}</CardRail>
                 {visibleStays.length === 0 && <p className="ws-empty">No stays to show right now. Try another location or date.</p>}
               </section>
             )}
@@ -499,10 +593,10 @@ export default function RouteExplorerHomepage() {
             {showDhabas && (
               <section className="ws-group">
                 <div className="ws-group-title">
-                  <h3><span className="ws-icon ws-dhabas"><Icon name="food" /></span><span>Find a good meal<small>{result?.dhabaProvider === 'google' ? 'Google-listed dhabas within 1 km of your driving route' : 'Compare dhabas before you stop'}</small></span></h3>
+                  <h3><span className="ws-icon ws-dhabas"><Icon name="food" /></span><span>Find a good meal<small>{result?.dhabaProvider === 'google' ? mode === 'nearby' ? 'Google-listed food stops within 5 km of you' : 'Google-listed dhabas within 1 km of your driving route' : 'Compare dhabas before you stop'}</small></span></h3>
                   {(result?.dhabas.length ?? 0) > 2 && <Link href={allDhabasHref}>View all dhabas<Icon name="arrow" /></Link>}
                 </div>
-                <CardRail label="dhabas along this route">{visibleDhabas.map((dhaba, index) => <DhabaCard key={dhaba.id} dhaba={dhaba} index={index} date={date} />)}</CardRail>
+                <CardRail label={mode === 'nearby' ? 'food stops near you' : 'dhabas along this route'}>{visibleDhabas.map((dhaba, index) => <DhabaCard key={dhaba.id} dhaba={dhaba} index={index} date={date} nearby={mode === 'nearby'} />)}</CardRail>
                 {visibleDhabas.length === 0 && <p className="ws-empty">No dhabas to show right now. Try another location.</p>}
               </section>
             )}

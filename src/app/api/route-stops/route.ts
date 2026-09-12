@@ -4,6 +4,7 @@ import { defaultSearchDateForSlot } from '@/lib/booking-time'
 import { prisma } from '@/lib/db'
 import {
   findGoogleDhabasAlongRoute,
+  findGoogleDhabasNearby,
   GoogleDhabaSearchError,
   isGoogleDhabaSearchConfigured,
 } from '@/lib/google-route-dhabas'
@@ -122,6 +123,10 @@ function minutesAhead(distanceKm: number) {
 export async function GET(req: NextRequest) {
   try {
     const params = req.nextUrl.searchParams
+    const dhabaPageToken = params.get('dhabaPageToken')?.trim() || undefined
+    if (dhabaPageToken && dhabaPageToken.length > 4_000) {
+      return NextResponse.json({ error: 'The next dhaba page is invalid. Search this route again.' }, { status: 400 })
+    }
     const requestedSlot = params.get('slot') as SlotType | null
     const slotsToSearch: SlotType[] = requestedSlot && ALLOWED_SLOTS.has(requestedSlot)
       ? [requestedSlot]
@@ -166,6 +171,11 @@ export async function GET(req: NextRequest) {
     if (mode === 'nearby' && !hasNearbyCoordinates && !near) {
       return NextResponse.json({ error: 'Choose an area to find nearby stops.' }, { status: 400 })
     }
+    const nearbyCenter = mode === 'nearby'
+      ? hasNearbyCoordinates
+        ? { latitude: latitude!, longitude: longitude! }
+        : near
+      : null
 
     const availabilityResults = await Promise.all(slotsToSearch.map(async slot => {
       const searchUrl = new URL('/api/search', req.url)
@@ -177,7 +187,7 @@ export async function GET(req: NextRequest) {
       if (mode === 'nearby' && hasNearbyCoordinates) {
         searchUrl.searchParams.set('lat', String(latitude))
         searchUrl.searchParams.set('lng', String(longitude))
-        searchUrl.searchParams.set('radius', '50')
+        searchUrl.searchParams.set('radius', '5')
       } else if (mode === 'nearby' && near) {
         searchUrl.searchParams.set('city', near.name)
         searchUrl.searchParams.set('locationId', near.id)
@@ -239,12 +249,6 @@ export async function GET(req: NextRequest) {
         projectedHotels = allProjectedHotels.filter(hotel => hotel.detourKm <= appliedCorridorKm)
         expandedSearch = projectedHotels.length > 0
       }
-      projectedHotels.sort((first, second) => (
-        first.progress - second.progress
-        || Number(second.highwayTag) - Number(first.highwayTag)
-        || first.detourKm - second.detourKm
-        || second.relevanceScore - first.relevanceScore
-      ))
     } else {
       projectedHotels = availableHotels.map(hotel => ({
         ...hotel,
@@ -254,6 +258,17 @@ export async function GET(req: NextRequest) {
         minutesAhead: minutesAhead(hotel.distanceKm ?? 0),
       }))
     }
+
+    // Highest-rated stops lead; when ratings match, prefer the smaller detour and
+    // the stop encountered sooner on the journey.
+    projectedHotels.sort((first, second) => (
+      second.avgRating - first.avgRating
+      || first.detourKm - second.detourKm
+      || first.distanceFromStartKm - second.distanceFromStartKm
+      || second.reviewCount - first.reviewCount
+      || second.relevanceScore - first.relevanceScore
+      || first.name.localeCompare(second.name)
+    ))
 
     const stays = projectedHotels.slice(0, 12)
     const restaurants = stays.length > 0
@@ -321,18 +336,20 @@ export async function GET(req: NextRequest) {
     let dhabas = waystayDhabas
     let dhabaProvider: 'google' | 'waystay' = 'waystay'
     let dhabaNotice: string | null = null
+    let dhabaPagination: { nextPageToken: string | null } | undefined
     let googleRouteDistanceKm: number | null = null
     if (mode === 'route' && from && to) {
       if (!isGoogleDhabaSearchConfigured()) {
         dhabaNotice = 'Google Maps is not connected yet. Showing Waystay-listed restaurants while it is set up.'
       } else {
         try {
-          const googleResults = await findGoogleDhabasAlongRoute(from, to)
+          const googleResults = await findGoogleDhabasAlongRoute(from, to, { pageToken: dhabaPageToken })
           dhabas = googleResults.dhabas
           dhabaProvider = 'google'
           googleRouteDistanceKm = googleResults.routeDistanceKm
-          if (googleResults.truncated) {
-            dhabaNotice = 'Google returned the first 60 matching dhabas on this route.'
+          dhabaPagination = { nextPageToken: googleResults.nextPageToken }
+          if (googleResults.nextPageToken) {
+            dhabaNotice = 'More food stops are available to load for this route.'
           }
         } catch (error) {
           logger.warn('api.route_stops.google_dhabas_failed', error, {
@@ -341,7 +358,34 @@ export async function GET(req: NextRequest) {
             toLocationId: to.id,
             status: error instanceof GoogleDhabaSearchError ? error.status : undefined,
           })
+          if (dhabaPageToken) {
+            return NextResponse.json({ error: 'Unable to load more food stops. Please try again.' }, { status: 502 })
+          }
           dhabaNotice = 'Google Maps could not load route dhabas right now. Showing Waystay-listed restaurants instead.'
+        }
+      }
+    } else if (mode === 'nearby' && nearbyCenter) {
+      if (!isGoogleDhabaSearchConfigured()) {
+        dhabaNotice = 'Google Maps is not connected yet. Showing Waystay-listed restaurants while it is set up.'
+      } else {
+        try {
+          const googleResults = await findGoogleDhabasNearby(nearbyCenter, { pageToken: dhabaPageToken })
+          dhabas = googleResults.dhabas
+          dhabaProvider = 'google'
+          dhabaPagination = { nextPageToken: googleResults.nextPageToken }
+          if (googleResults.nextPageToken) {
+            dhabaNotice = 'More food stops are available to load within 5 km.'
+          }
+        } catch (error) {
+          logger.warn('api.route_stops.google_nearby_dhabas_failed', error, {
+            mode,
+            nearLocationId: near?.id,
+            status: error instanceof GoogleDhabaSearchError ? error.status : undefined,
+          })
+          if (dhabaPageToken) {
+            return NextResponse.json({ error: 'Unable to load more nearby food stops. Please try again.' }, { status: 502 })
+          }
+          dhabaNotice = 'Google Maps could not load nearby food stops right now. Showing Waystay-listed restaurants instead.'
         }
       }
     }
@@ -362,6 +406,7 @@ export async function GET(req: NextRequest) {
       dhabas,
       dhabaProvider,
       dhabaNotice,
+      dhabaPagination,
     })
   } catch (error) {
     logger.error('api.route_stops.failed', error)
