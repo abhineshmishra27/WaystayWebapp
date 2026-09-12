@@ -7,6 +7,7 @@ import { normalizePhone } from '@/lib/otp'
 import { createRegistrationLoginToken } from '@/lib/registration-login-token'
 import { verifyFirebasePhoneIdToken } from '@/lib/firebase-admin'
 import { isPrimaryAdmin } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -42,7 +43,8 @@ export async function POST(req: NextRequest) {
     if (firebaseIdToken) {
       try {
         firebaseIdentity = await verifyFirebasePhoneIdToken(firebaseIdToken)
-      } catch {
+      } catch (error) {
+        logger.error('api.auth.register.mobile_verification_failed_request_a_new_otp', error)
         return NextResponse.json({ error: 'Mobile verification failed. Request a new OTP.' }, { status: 401 })
       }
       if (firebaseIdentity.phone !== phone) {
@@ -113,7 +115,7 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error('Register error:', error)
+    logger.error('api.auth.register.register_error', error)
     if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
       return NextResponse.json(
         { error: 'That email address or mobile number is already registered.' },

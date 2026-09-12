@@ -8,13 +8,14 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
-import { dateRangeStrings, fullDayStayDates, requestHasCapacity } from '@/lib/booking-inventory'
-import { lockRoomInventory } from '@/lib/booking-inventory-db'
+import { dateRangeStrings, fullDayStayDates, requestHasCapacity, requestHoldDates } from '@/lib/booking-inventory'
+import { loadChannelHoldsForRoom, lockRoomInventory } from '@/lib/booking-inventory-db'
 import { slotIsPastForBooking, todayInIndia } from '@/lib/booking-time'
 import { roomAllowsSlotType } from '@/lib/room-slot-settings'
 import { createBookingDateTimes } from '@/lib/booking-datetime'
-import { moneyToNumber, rupeesToPaise } from '@/lib/money'
+import { moneyToNumber, PLATFORM_CURRENCY, rupeesToPaise } from '@/lib/money'
 import { recordPaymentEvent } from '@/lib/payments'
+import { logger } from '@/lib/logger'
 
 const createBookingSchema = z.object({
   slotId: z.string(),
@@ -29,6 +30,25 @@ const createBookingSchema = z.object({
   totalAmount: z.number().positive(),
   paymentMethod: z.enum(['RAZORPAY', 'PAY_AT_HOTEL']).default('RAZORPAY'),
 })
+
+/** Shared so the throw site and the status mapping cannot drift apart. */
+const CHANNEL_PREPAYMENT_REQUIRED = 'This property requires online payment to confirm the booking'
+const CHANNEL_CURRENCY_MISMATCH = 'This property is not currently bookable on WayStay'
+
+/**
+ * How long an identical request is treated as a repeat of the first one rather than a
+ * new booking. Long enough to absorb a double-click, an impatient retry or a flaky
+ * connection; short enough that someone deliberately booking the same room twice is
+ * only briefly inconvenienced.
+ */
+const DUPLICATE_SUBMIT_WINDOW_MS = 2 * 60 * 1000
+
+/**
+ * Hours per stay type. Module-scoped because both the duplicate check and the booking
+ * it guards derive totalHours from it - if they disagreed, the guard would compare
+ * against a number the booking never stored.
+ */
+const SLOT_HOURS: Record<string, number> = { H3: 3, H6: 6, H12: 12, FULLDAY: 24 }
 
 function isRazorpayConfigured() {
   return Boolean(
@@ -53,7 +73,20 @@ function isBookingConflict(error: Error) {
     'Not enough rooms are available for this time',
     'This hotel is not currently accepting bookings',
     'Payment gateway authentication failed',
+    CHANNEL_PREPAYMENT_REQUIRED,
+    CHANNEL_CURRENCY_MISMATCH,
   ].includes(error.message) || error.message.startsWith('Selected guests require at least')
+}
+
+/**
+ * Rejections that are not a 409. Anything absent defaults to Conflict, which suits the
+ * inventory races that make up most of this list but not a request that was simply
+ * asking for something this property does not offer.
+ */
+const BOOKING_ERROR_STATUSES: Record<string, number> = {
+  'Payment gateway authentication failed': 503,
+  [CHANNEL_PREPAYMENT_REQUIRED]: 400,
+  [CHANNEL_CURRENCY_MISMATCH]: 409,
 }
 
 export async function GET(req: NextRequest) {
@@ -98,7 +131,8 @@ export async function GET(req: NextRequest) {
         additionalAmount: moneyToNumber(extension.additionalAmount),
       })),
     })))
-  } catch {
+  } catch (error) {
+    logger.error('api.bookings.failed_to_fetch_bookings', error)
     return NextResponse.json({ error: 'Failed to fetch bookings' }, { status: 500 })
   }
 }
@@ -131,12 +165,42 @@ export async function POST(req: NextRequest) {
 
     const result = await prisma.$transaction(async (tx) => {
       // Lock the slot
-      const slot = await tx.roomSlot.findUnique({ where: { id: slotId }, include: { room: { include: { hotel: true } } } })
+      const slot = await tx.roomSlot.findUnique({
+        where: { id: slotId },
+        include: {
+          room: {
+            include: {
+              hotel: { include: { channelConnection: { select: { currency: true } } } },
+            },
+          },
+        },
+      })
       if (!slot) throw new Error('Slot not found')
       if (!slot.room.hotel.isApproved || !slot.room.hotel.isActive || !slot.room.hotel.ownerEnabled) {
         throw new Error('This hotel is not currently accepting bookings')
       }
+      // Pay-at-hotel confirms a booking outright with nothing collected. On our own
+      // hotels that is a business call; on channel-managed inventory it commits a
+      // partner's room on a promise, and if the push to the channel then fails we have
+      // sold a room we do not control. Channel stays must be paid up front.
+      if (paymentMethod === 'PAY_AT_HOTEL' && slot.room.hotel.channelConnectionId) {
+        throw new Error(CHANNEL_PREPAYMENT_REQUIRED)
+      }
+      // Every amount below is a bare number and Razorpay is configured for one
+      // currency, so a property that prices in anything else would be charged its
+      // number of rupees. Import already refuses non-INR properties; this makes the
+      // assumption impossible to break later by a route that skips that check.
+      const connectionCurrency = slot.room.hotel.channelConnection?.currency
+      if (connectionCurrency && connectionCurrency !== PLATFORM_CURRENCY) {
+        logger.error('api.bookings.channel_currency_mismatch', undefined, {
+          hotelId: slot.room.hotel.id,
+          connectionCurrency,
+          platformCurrency: PLATFORM_CURRENCY,
+        })
+        throw new Error(CHANNEL_CURRENCY_MISMATCH)
+      }
       await lockRoomInventory(tx, slot.roomId)
+
       const maxGuestsPerRoom = Math.max(1, Math.min(slot.room.maxOccupancy, 3))
       const requiredRooms = Math.ceil(guestCount / maxGuestsPerRoom)
       if (roomCount < requiredRooms) {
@@ -155,6 +219,50 @@ export async function POST(req: NextRequest) {
       if (slotType && slot.slotType !== slotType) throw new Error('Selected slot type does not match the booking request')
       if (!roomAllowsSlotType(slot.room, slot.slotType)) throw new Error('This stay duration is disabled for this room')
       if (slotIsPastForBooking(slot.slotType, slot.date, slot.startTime)) throw new Error('This slot has already started')
+      // Double-submit guard. A double-click, an impatient retry or a dropped response
+      // otherwise produces a second booking and a second payment order for the same
+      // stay. Inventory was never at risk - the advisory lock above and the capacity
+      // check below see to that - but the duplicate row and orphan order are real.
+      //
+      // Placed here on purpose. It has to run after the stay length is known, because
+      // roomSlotId alone identifies only the first night: matching without totalHours
+      // would answer a three-night request with a one-night booking. It also has to run
+      // before the capacity check, or a double-click on a single-unit room would be
+      // rejected as "no rooms available" by the caller's own first booking rather than
+      // recognised as a repeat. Safe as check-then-create because the advisory lock
+      // serialises every writer for this room.
+      const expectedStatus = paymentMethod === 'PAY_AT_HOTEL' ? 'CONFIRMED' : 'PENDING'
+      const expectedTotalHours = (SLOT_HOURS[slot.slotType] ?? 3) * dates.length
+      const duplicate = await tx.booking.findFirst({
+        where: {
+          customerId: session!.user.id,
+          roomSlotId: slotId,
+          guestEmail,
+          roomCount,
+          guestCount,
+          totalHours: expectedTotalHours,
+          // Discriminates the payment intent: a pay-at-hotel retry looks for the
+          // confirmed booking it made, an online retry for the pending one.
+          status: expectedStatus,
+          createdAt: { gt: new Date(Date.now() - DUPLICATE_SUBMIT_WINDOW_MS) },
+        },
+        include: { payment: { select: { providerOrderId: true } } },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (duplicate) {
+        logger.info('api.bookings.duplicate_submit_ignored', {
+          bookingId: duplicate.id,
+          customerId: session!.user.id,
+          slotId,
+          totalHours: expectedTotalHours,
+        })
+        // Return the original rather than an error: from the caller's point of view the
+        // request succeeded, and handing back the same order id lets an interrupted
+        // checkout resume instead of stranding a paid-for-nothing order.
+        const { payment, ...bookingOnly } = duplicate
+        return { booking: bookingOnly, razorpayOrderId: payment?.providerOrderId ?? null, duplicate: true }
+      }
+
       if (dates.length > 1 && (requestedSlotType !== 'FULLDAY' || slot.slotType !== 'FULLDAY')) {
         throw new Error('Multi-day bookings require a full-day slot')
       }
@@ -167,12 +275,18 @@ export async function POST(req: NextRequest) {
           roomSlot: { select: { date: true, slotType: true, startTime: true, endTime: true } },
         },
       })
+      const channelHolds = await loadChannelHoldsForRoom(tx, slot.roomId, requestHoldDates({
+        dates,
+        slotType: slot.slotType,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+      }))
       if (!requestHasCapacity(activeBookings, {
         dates,
         slotType: slot.slotType,
         startTime: slot.startTime,
         endTime: slot.endTime,
-      }, slot.room.inventoryCount, roomCount)) {
+      }, slot.room.inventoryCount, roomCount, channelHolds)) {
         throw new Error('Not enough rooms are available for this time')
       }
 
@@ -200,8 +314,7 @@ export async function POST(req: NextRequest) {
         endTime: slot.endTime,
       })
 
-      const hours: Record<string, number> = { H3: 3, H6: 6, H12: 12, FULLDAY: 24 }
-      const totalHours = (hours[slot.slotType] || 3) * dates.length
+      const totalHours = expectedTotalHours
       const slotPrices = {
         H3: slot.room.price_3h,
         H6: slot.room.price_6h,
@@ -229,7 +342,7 @@ export async function POST(req: NextRequest) {
       })
 
       if (paymentMethod === 'PAY_AT_HOTEL') {
-        return { booking, razorpayOrderId: null }
+        return { booking, razorpayOrderId: null, duplicate: false }
       }
 
       // Create Razorpay order
@@ -238,7 +351,7 @@ export async function POST(req: NextRequest) {
         const razorpay = getRazorpay()
         order = await razorpay.orders.create({
           amount: rupeesToPaise(booking.totalAmount),
-          currency: 'INR',
+          currency: PLATFORM_CURRENCY,
           receipt: booking.id.slice(-20),
           notes: {
             bookingId: booking.id,
@@ -246,7 +359,7 @@ export async function POST(req: NextRequest) {
           },
         })
       } catch (error) {
-        console.error('Razorpay order error:', error)
+        logger.error('api.bookings.razorpay_order_error', error)
         throw new Error('Payment gateway authentication failed')
       }
 
@@ -255,7 +368,7 @@ export async function POST(req: NextRequest) {
         data: {
           bookingId: booking.id,
           amount: booking.totalAmount,
-          currency: 'INR',
+          currency: PLATFORM_CURRENCY,
           provider: 'RAZORPAY',
           providerOrderId: order.id,
           status: 'PENDING',
@@ -271,25 +384,29 @@ export async function POST(req: NextRequest) {
         providerEventId: order.id,
       })
 
-      return { booking, razorpayOrderId: order.id }
+      return { booking, razorpayOrderId: order.id, duplicate: false }
     })
 
     if (!result.razorpayOrderId) {
-      try {
-        const booking = await prisma.booking.findUnique({
-          where: { id: result.booking.id },
-          include: { roomSlot: { include: { room: { include: { hotel: true } } } } },
-        })
-        if (booking) await sendBookingConfirmation(booking)
-      } catch (emailErr) {
-        console.error('Email error (non-blocking):', emailErr)
+      // A replayed submit must not send a second confirmation email for a stay the
+      // guest has already been told about.
+      if (!result.duplicate) {
+        try {
+          const booking = await prisma.booking.findUnique({
+            where: { id: result.booking.id },
+            include: { roomSlot: { include: { room: { include: { hotel: true } } } } },
+          })
+          if (booking) await sendBookingConfirmation(booking)
+        } catch (emailErr) {
+          logger.error('api.bookings.confirmation_email_failed', emailErr, { bookingId: result.booking.id })
+        }
       }
 
       return NextResponse.json({
         bookingId: result.booking.id,
         paymentMethod: 'PAY_AT_HOTEL',
         amount: rupeesToPaise(result.booking.totalAmount),
-        currency: 'INR',
+        currency: PLATFORM_CURRENCY,
       }, { status: 201 })
     }
 
@@ -297,14 +414,14 @@ export async function POST(req: NextRequest) {
       bookingId: result.booking.id,
       razorpayOrderId: result.razorpayOrderId,
       amount: rupeesToPaise(result.booking.totalAmount),
-      currency: 'INR',
+      currency: PLATFORM_CURRENCY,
     }, { status: 201 })
   } catch (err) {
-    console.error('Create booking error:', err)
+    logger.error('api.bookings.create_booking_error', err)
     if (err instanceof Error && isBookingConflict(err)) {
       return NextResponse.json(
         { error: err.message },
-        { status: err.message === 'Payment gateway authentication failed' ? 503 : 409 }
+        { status: BOOKING_ERROR_STATUSES[err.message] ?? 409 }
       )
     }
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 })

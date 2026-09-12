@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { uploadImage } from '@/lib/cloudinary'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url, publicId }, { status: 200 })
   } catch (err) {
-    console.error('Upload error:', err)
+    logger.error('api.upload.upload_error', err)
     const message = err instanceof Error ? err.message : 'Upload failed'
     return NextResponse.json({ error: message }, { status: 500 })
   }

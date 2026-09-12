@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { fullDayStayDates, slotIsUnavailable } from '@/lib/booking-inventory'
+import { dateRangeStrings, fullDayStayDates, slotIsUnavailable } from '@/lib/booking-inventory'
+import { loadChannelHolds } from '@/lib/booking-inventory-db'
 import { slotIsPastForBooking } from '@/lib/booking-time'
 import { descendantLocationIds, locationRadiusPlan } from '@/lib/location-search'
-import { roomAllowsSlotType, type CustomerSlotType, type RoomSlotSettings } from '@/lib/room-slot-settings'
+import { logger } from '@/lib/logger'
+import {
+  ROOM_SLOT_SETTING_FIELDS,
+  roomAllowsSlotType,
+  type CustomerSlotType,
+  type RoomSlotSettings,
+} from '@/lib/room-slot-settings'
 import {
   findHotelBookingPopularity,
   findHotelTextMatches,
@@ -17,6 +25,33 @@ import {
   distanceRelevance,
   reviewConfidence,
 } from '@/lib/search-ranking'
+
+/**
+ * How many hotels may enter ranking for a single search.
+ *
+ * Relevance is decided before the database is asked for hotel detail, not after:
+ * geography and text matching produce an ordered candidate list, and only that many
+ * hotels are loaded and ranked. Without this the route loaded every approved hotel -
+ * with rooms, images and reviews - and paginated the array in memory, which is
+ * survivable at 51 hotels and not at a few thousand.
+ */
+const CANDIDATE_POOL_LIMIT = 300
+
+/**
+ * How far back to look for bookings that might still overlap the requested dates.
+ *
+ * A full-day booking occupies its start date plus however many nights it runs, so one
+ * that began before the search window can still consume inventory inside it. The
+ * capacity check needs those, but it does not need every booking ever made: without a
+ * lower bound this query grows with the lifetime of the business. Thirty days covers
+ * any realistic stay; a longer one would have to start more than a month before the
+ * dates being searched.
+ */
+const OVERLAPPING_STAY_LOOKBACK_DAYS = 30
+
+function shiftDate(date: string, days: number) {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
+}
 
 type PricedRoom = RoomSlotSettings & {
   inventoryCount: number
@@ -115,6 +150,7 @@ export async function GET(req: NextRequest) {
           },
         })
       : []
+    const locationById = new Map(locations.map(location => [location.id, location]))
     const selectedLocation = locationId ? locations.find(location => location.id === locationId) : null
     if (locationId && !selectedLocation) {
       return NextResponse.json({ error: 'Unknown locationId' }, { status: 400 })
@@ -149,10 +185,11 @@ export async function GET(req: NextRequest) {
             locationResolution.location.latitude,
             locationResolution.location.longitude,
             radiusPlan.expandedKm,
+            CANDIDATE_POOL_LIMIT,
           )
         : Promise.resolve([]),
       hasCoords && lat !== null && lng !== null
-        ? findNearbyHotels(lat, lng, radius)
+        ? findNearbyHotels(lat, lng, radius, CANDIDATE_POOL_LIMIT)
         : Promise.resolve([]),
     ])
 
@@ -175,11 +212,39 @@ export async function GET(req: NextRequest) {
         : candidateHotelIds.filter(hotelId => coordinateNearbyIds.has(hotelId))
     }
 
+    // Trim to the pool limit with exact name matches first, so capping can never drop
+    // the hotel someone searched for by name in favour of a merely nearby one.
+    let candidatePoolCapped = false
+    if (candidateHotelIds !== null && candidateHotelIds.length > CANDIDATE_POOL_LIMIT) {
+      const exactFirst = [
+        ...candidateHotelIds.filter(hotelId => directHotelIds.has(hotelId)),
+        ...candidateHotelIds.filter(hotelId => !directHotelIds.has(hotelId)),
+      ]
+      candidateHotelIds = exactFirst.slice(0, CANDIDATE_POOL_LIMIT)
+      candidatePoolCapped = true
+    }
+
+    // Only rooms that can serve the requested stay type are worth loading. A
+    // night-fare-only room has no slot-wise (transit) inventory at all, so pulling it
+    // into an hourly search costs rows and can never yield a bookable result - and the
+    // reverse for a slot-only room in a full-day search.
+    const enabledFieldForSlot = slotType && slotType in ROOM_SLOT_SETTING_FIELDS
+      ? ROOM_SLOT_SETTING_FIELDS[slotType]
+      : null
+    const roomWhere: Prisma.RoomWhereInput = {
+      isActive: true,
+      available: true,
+      ...(enabledFieldForSlot ? { [enabledFieldForSlot]: true } : {}),
+    }
+
     const hotels = await prisma.hotel.findMany({
       where: {
         isApproved: true,
         isActive: true,
         ownerEnabled: true,
+        // A hotel with no room that can serve the requested stay type is not a result.
+        // Excluding it here means it is never loaded, rather than loaded and discarded.
+        rooms: { some: roomWhere },
         ...(candidateHotelIds !== null
           ? { id: { in: candidateHotelIds } }
           : city && !locationId && !placeId && !locationResolution && hotelTextMatches.length === 0
@@ -187,17 +252,13 @@ export async function GET(req: NextRequest) {
           : {}),
       },
       include: {
-        images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-        reviews: { where: { status: 'PUBLISHED' }, select: { rating: true } },
-        location: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-          },
-        },
+        // Images and the Location join are deliberately absent. Rooms are needed for
+        // every candidate because availability and pricing decide who is in the
+        // results at all, but a thumbnail is only ever shown for the page being
+        // returned - so it is fetched after pagination, for those hotels only.
+        // Location is resolved from the `locations` already in memory.
         rooms: {
-          where: { isActive: true, available: true },
+          where: roomWhere,
           select: {
             id: true,
             inventoryCount: true,
@@ -214,25 +275,49 @@ export async function GET(req: NextRequest) {
           orderBy: { price_3h: 'asc' },
         },
       },
+      // Safety net for the browse-all case, where no geography or text query has
+      // already bounded the pool. Ordered so the cap is deterministic.
+      take: CANDIDATE_POOL_LIMIT,
+      orderBy: [{ rating_avg: 'desc' }, { id: 'asc' }],
     })
 
+    // Aggregated in the database rather than by loading every review row. Note
+    // Hotel.rating_avg is a manually entered star rating, not a maintained average of
+    // reviews, so it stays the fallback for hotels that have no reviews yet.
+    const reviewStatsByHotelId = new Map<string, { average: number; count: number }>()
+    if (hotels.length > 0) {
+      const grouped = await prisma.review.groupBy({
+        by: ['hotelId'],
+        where: { hotelId: { in: hotels.map(hotel => hotel.id) }, status: 'PUBLISHED' },
+        _avg: { rating: true },
+        _count: { _all: true },
+      })
+      for (const row of grouped) {
+        reviewStatsByHotelId.set(row.hotelId, {
+          average: row._avg.rating ?? 0,
+          count: row._count._all,
+        })
+      }
+    }
+
     const ratingByHotelId = new Map(
-      hotels.map(hotel => [
-        hotel.id,
-        hotel.reviews.length > 0
-          ? hotel.reviews.reduce((sum, review) => sum + review.rating, 0) / hotel.reviews.length
-          : hotel.rating_avg,
-      ]),
+      hotels.map(hotel => {
+        const stats = reviewStatsByHotelId.get(hotel.id)
+        return [hotel.id, stats && stats.count > 0 ? stats.average : hotel.rating_avg]
+      }),
     )
 
-    let filteredHotels = hotels.filter(hotel => hotel.rooms.some(
-      room => !slotType || roomAllowsSlotType(room, slotType),
-    ))
+    // Room-level and hotel-level filtering already happened in SQL above.
+    let filteredHotels = hotels
     if (startDate && endDate && slotType) {
       const now = new Date()
       const roomIds = filteredHotels.flatMap(hotel => hotel.rooms.map(room => room.id))
       const requestedDates = slotType === 'FULLDAY' ? fullDayStayDates(startDate, endDate) : [startDate]
-      const [matchingSlots, activeBookings] = roomIds.length > 0
+      // One day past the range so overnight hourly slots still see the next day's holds.
+      const holdRangeEnd = new Date(
+        Date.parse(`${slotType === 'FULLDAY' ? endDate : startDate}T00:00:00Z`) + 86_400_000,
+      ).toISOString().slice(0, 10)
+      const [matchingSlots, activeBookings, channelHoldsByRoomId] = roomIds.length > 0
         ? await Promise.all([
             prisma.roomSlot.findMany({
               where: {
@@ -245,7 +330,15 @@ export async function GET(req: NextRequest) {
             prisma.booking.findMany({
               where: {
                 status: { in: ['PENDING', 'CONFIRMED'] },
-                roomSlot: { roomId: { in: roomIds } },
+                roomSlot: {
+                  roomId: { in: roomIds },
+                  // Bounded so this does not grow with every booking ever taken. The
+                  // lower bound still catches a long stay that began before the window.
+                  date: {
+                    gte: shiftDate(startDate, -OVERLAPPING_STAY_LOOKBACK_DAYS),
+                    lte: slotType === 'FULLDAY' ? endDate : startDate,
+                  },
+                },
               },
               select: {
                 totalHours: true,
@@ -253,8 +346,9 @@ export async function GET(req: NextRequest) {
                 roomSlot: { select: { roomId: true, date: true, slotType: true, startTime: true, endTime: true } },
               },
             }),
+            loadChannelHolds(prisma, roomIds, dateRangeStrings(startDate, holdRangeEnd)),
           ])
-        : [[], []]
+        : [[], [], new Map()]
 
       const slotsByRoomId = new Map<string, typeof matchingSlots>()
       for (const candidate of matchingSlots) {
@@ -289,6 +383,7 @@ export async function GET(req: NextRequest) {
               slotType === 'FULLDAY' ? endDate : candidate.date,
               room.inventoryCount,
               roomCount,
+              channelHoldsByRoomId.get(room.id) ?? [],
             )
           })
         })
@@ -364,7 +459,7 @@ export async function GET(req: NextRequest) {
 
     for (const hotel of filteredHotels) {
       const distance = distanceByHotelId.get(hotel.id) ?? null
-      const reviewCount = Math.max(hotel.reviews.length, hotel.total_review)
+      const reviewCount = Math.max(reviewStatsByHotelId.get(hotel.id)?.count ?? 0, hotel.total_review)
       const averageRating = ratingByHotelId.get(hotel.id) ?? globalRatingMean
       const qualityRating = bayesianRating(averageRating, reviewCount, globalRatingMean)
       const bookingCount = bookingCountByHotelId.get(hotel.id) ?? 0
@@ -388,6 +483,10 @@ export async function GET(req: NextRequest) {
         reviewConfidence: reviewConfidence(reviewCount),
         bookingPopularity: bookingPopularity(bookingCount, highestBookingCount),
       })
+      // Resolved from the locations already in memory rather than a join on every
+      // candidate row. Only populated when a location query was made, which is also
+      // the only branch below that reads it.
+      const hotelLocation = hotel.locationId ? locationById.get(hotel.locationId) : undefined
       const relevanceReasons: string[] = []
 
       if (hasCoords && distance !== null) {
@@ -404,10 +503,10 @@ export async function GET(req: NextRequest) {
           )
         } else if (
           target.type === 'CITY'
-          && hotel.location?.type === 'LOCALITY'
-          && matchingLocationIds.has(hotel.location.id)
+          && hotelLocation?.type === 'LOCALITY'
+          && matchingLocationIds.has(hotelLocation.id)
         ) {
-          relevanceReasons.push(`In ${hotel.location.name}`)
+          relevanceReasons.push(`In ${hotelLocation.name}`)
         } else if (distance !== null) {
           relevanceReasons.push(`${relevanceDistance(distance)} from ${target.name}`)
         }
@@ -438,6 +537,21 @@ export async function GET(req: NextRequest) {
     const totalCount = filteredHotels.length
     const paginatedHotels = filteredHotels.slice(skip, skip + limit)
 
+    // Thumbnails for the page being returned only. Ranking needs rooms for every
+    // candidate, but nothing needs an image until a hotel has earned a place on the
+    // page, so this scales with page size rather than with the candidate pool.
+    const imageByHotelId = new Map<string, string>()
+    if (paginatedHotels.length > 0) {
+      const images = await prisma.hotelImage.findMany({
+        where: { hotelId: { in: paginatedHotels.map(hotel => hotel.id) } },
+        select: { hotelId: true, url: true, sortOrder: true },
+        orderBy: { sortOrder: 'asc' },
+      })
+      for (const image of images) {
+        if (!imageByHotelId.has(image.hotelId)) imageByHotelId.set(image.hotelId, image.url)
+      }
+    }
+
     const result = paginatedHotels.map(hotel => {
       const selectedSlotPrice = lowestRoomPrice(hotel.rooms, slotType ?? 'H3')
       const hourlyPrices = hotel.rooms.map(room => room.pricePerHour)
@@ -452,14 +566,17 @@ export async function GET(req: NextRequest) {
       selectedSlotPrice: selectedSlotPrice ? selectedSlotPrice * roomCount * stayCount : null,
       id: hotel.id,
       name: hotel.name,
+      address: hotel.address,
       city: hotel.city,
       state: hotel.state,
+      amenities: hotel.amenities,
+      highwayTag: hotel.highway_tag,
       distanceKm: distanceByHotelId.has(hotel.id) ? Number((distanceByHotelId.get(hotel.id) || 0).toFixed(1)) : null,
       lat: hotel.lat,
       lng: hotel.lng,
-      image: hotel.images[0]?.url || null,
+      image: imageByHotelId.get(hotel.id) ?? null,
       avgRating: ratingByHotelId.get(hotel.id) ?? 0,
-      reviewCount: hotel.reviews.length || hotel.total_review,
+      reviewCount: reviewStatsByHotelId.get(hotel.id)?.count || hotel.total_review,
       pricePerHour: hourlyPrices.length > 0 ? Math.min(...hourlyPrices) : null,
       price3h: lowestRoomPrice(hotel.rooms, 'H3'),
       price6h: lowestRoomPrice(hotel.rooms, 'H6'),
@@ -476,6 +593,13 @@ export async function GET(req: NextRequest) {
       hotels: result,
       count: totalCount,
       page,
+      // `count` is the number of relevant candidates considered, not every hotel that
+      // could conceivably match. When the pool was capped, say so rather than letting
+      // the UI present a truncated number as a complete total.
+      candidatePool: {
+        limit: CANDIDATE_POOL_LIMIT,
+        capped: candidatePoolCapped || hotels.length >= CANDIDATE_POOL_LIMIT,
+      },
       searchRadius,
       resolvedLocation: locationResolution
         ? {
@@ -490,7 +614,7 @@ export async function GET(req: NextRequest) {
         : null,
     })
   } catch (error) {
-    console.error('Search error:', error)
+    logger.error('api.search.search_error', error)
     return NextResponse.json({ error: 'Search failed' }, { status: 500 })
   }
 }

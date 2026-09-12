@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
 import { z } from 'zod'
+import { logger } from '@/lib/logger'
 
 const updateItemSchema = z.object({
   category: z.string().min(2).optional(),
@@ -39,7 +40,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ re
     if (!parsed.success) return NextResponse.json({ error: 'Invalid menu item update.' }, { status: 400 })
     const item = await prisma.menuItem.update({ where: { id: itemId }, data: parsed.data })
     return NextResponse.json(item)
-  } catch {
+  } catch (error) {
+    logger.error('api.restaurants.menu-items.failed_to_update_item', error)
     return NextResponse.json({ error: 'Failed to update item' }, { status: 500 })
   }
 }
@@ -56,7 +58,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ r
     if (!allowed) return NextResponse.json({ error: 'You do not manage this restaurant.' }, { status: 403 })
     await prisma.menuItem.update({ where: { id: itemId }, data: { isAvailable: false } })
     return NextResponse.json({ success: true })
-  } catch {
+  } catch (error) {
+    logger.error('api.restaurants.menu-items.failed_to_delete_item', error)
     return NextResponse.json({ error: 'Failed to delete item' }, { status: 500 })
   }
 }

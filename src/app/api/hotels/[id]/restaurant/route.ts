@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { z } from 'zod'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const schema = z.object({
   name: z.string().min(2),
@@ -20,7 +21,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     })
     if (!restaurant) return NextResponse.json(null)
     return NextResponse.json(restaurant)
-  } catch {
+  } catch (error) {
+    logger.error('api.hotels.restaurant.failed_to_fetch_restaurant', error)
     return NextResponse.json({ error: 'Failed to fetch restaurant' }, { status: 500 })
   }
 }
@@ -47,7 +49,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const restaurant = await prisma.restaurant.create({ data: { ...parsed.data, hotelId } })
     return NextResponse.json(restaurant, { status: 201 })
-  } catch {
+  } catch (error) {
+    logger.error('api.hotels.restaurant.failed_to_create_restaurant', error)
     return NextResponse.json({ error: 'Failed to create restaurant' }, { status: 500 })
   }
 }

@@ -1,12 +1,10 @@
-require('dotenv').config()
 const bcrypt = require('bcryptjs')
 const { PrismaClient } = require('@prisma/client')
 const { PrismaPg } = require('@prisma/adapter-pg')
+const { resolveDatabaseUrl } = require('./database-url')
 
 const prisma = new PrismaClient({
-  adapter: new PrismaPg({
-    connectionString: (process.env.DATABASE_URL || '').replace(/(^"|"$)/g, ''),
-  }),
+  adapter: new PrismaPg({ connectionString: resolveDatabaseUrl() }),
 })
 
 const cities = [
@@ -95,10 +93,7 @@ async function ensureSlots(roomId, startDate, days) {
 }
 
 async function main() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL is required')
-  }
-
+  // resolveDatabaseUrl() already threw at import time if nothing is configured.
   const passwordHash = await bcrypt.hash('Owner@123', 12)
   const slotStart = new Date('2026-06-09T00:00:00')
   const slotDays = 180

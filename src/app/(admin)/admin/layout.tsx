@@ -9,6 +9,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: '/admin', label: 'Overview' },
     { href: '/admin/users', label: 'Users' },
     { href: '/admin/partners', label: 'Partner applications' },
+    // Distinct from partner applications above: that is owner onboarding, this is
+    // inventory pulled from a channel manager.
+    { href: '/admin/channels', label: 'Channel managers' },
     { href: '/admin/hotels', label: 'Hotels' },
     { href: '/admin/bookings', label: 'Bookings' },
     { href: '/admin/reviews', label: 'Reviews' },

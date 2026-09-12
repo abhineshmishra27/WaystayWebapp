@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import { formatRupees, type MoneyValue } from '@/lib/money'
+import { logger } from '@/lib/logger'
 
 const FROM = process.env.EMAIL_FROM || 'Waystay <noreply@waystay.co.in>'
 type EmailPayload = Parameters<Resend['emails']['send']>[0]
@@ -14,7 +15,7 @@ function getResend() {
 async function sendEmail(payload: EmailPayload) {
   const resend = getResend()
   if (!resend) {
-    console.warn('Skipping email: RESEND_API_KEY is not configured')
+    logger.warn('lib.email.skipping_email_resend_api_key_is_not_configured')
     return
   }
 

@@ -76,6 +76,46 @@ enum HotelListingRequestStatus {
   REJECTED
 }
 
+/// A channel manager / PMS that supplies external inventory. Distinct from
+/// PartnerApplication, which is WayStay's hotel-owner acquisition funnel.
+enum ChannelProvider {
+  CLOUDBEDS
+}
+
+enum ChannelConnectionStatus {
+  PENDING
+  ACTIVE
+  ERROR
+  DISCONNECTED
+}
+
+enum ChannelSyncKind {
+  IMPORT
+  AVAILABILITY
+  PUSH
+  WEBHOOK
+}
+
+enum ChannelSyncOutcome {
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+enum ChannelPushStatus {
+  PENDING
+  PUSHED
+  FAILED
+  /// Retried until the attempt limit without success. Needs a human, not another retry.
+  ABANDONED
+  /// The reservation was pushed and has since been cancelled on the channel. Distinct
+  /// from PUSHED so a cancelled stay is never mistaken for one still holding a room.
+  CANCELLED
+  /// Cancelled on WayStay, but the channel could not be told. The partner still believes
+  /// the room is sold, so this needs chasing.
+  CANCEL_FAILED
+}
+
 model User {
   id              String    @id @default(cuid())
   email           String    @unique
@@ -96,6 +136,7 @@ model User {
   reviews                     Review[]
   uploadedImages              HotelImage[]
   auditLogs                   AuditLog[]
+  channelConnections          ChannelConnection[]   @relation("ChannelConnectionOwner")
   reviewedPartnerApplications PartnerApplication[]  @relation("PartnerApplicationReviewer")
   hotelListingRequests        HotelListingRequest[] @relation("HotelListingRequestOwner")
   reviewedHotelRequests       HotelListingRequest[] @relation("HotelListingRequestReviewer")
@@ -194,11 +235,23 @@ model Hotel {
   reviews         Review[]
   rating_avg      Float
   total_review    Int
-  license_number  String
-  gst_number      String
+  /// Nullable because channel-imported properties are not Indian-registered and have
+  /// no GST/licence number. Writing placeholder values into compliance fields would be
+  /// worse than an explicit null. Manual creation still requires them (see Zod schema
+  /// in src/app/api/hotels/route.ts).
+  license_number  String?
+  gst_number      String?
   restaurant      Restaurant?
   auditLogs       AuditLog[]
 
+  /// Set when this hotel was imported from a channel manager rather than onboarded
+  /// directly. Channel-managed hotels are excluded from owner-facing edit flows that
+  /// sync would overwrite, and may legitimately lack Indian compliance fields.
+  channelConnectionId String?
+  channelConnection   ChannelConnection? @relation(fields: [channelConnectionId], references: [id], onDelete: SetNull)
+  externalPropertyId  String?
+
+  @@unique([channelConnectionId, externalPropertyId])
   @@index([locationId])
 }
 
@@ -274,14 +327,23 @@ model Room {
   isActive            Boolean    @default(true)
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
-  base_clean_video_id String
-  last_clean_video_id String
-  floor_number        Int
-  area_sqft           Float
-  ai_clean_score      Float
-  ai_last_checked_at  DateTime
+  /// Nullable: these are WayStay-specific housekeeping/AI fields that a channel
+  /// manager has no equivalent for on imported rooms.
+  base_clean_video_id String?
+  last_clean_video_id String?
+  floor_number        Int?
+  area_sqft           Float?
+  ai_clean_score      Float?
+  ai_last_checked_at  DateTime?
   ai_clean_status     String     @default("clean")
   slots               RoomSlot[]
+  channelHolds        ChannelInventoryHold[]
+  channelMapping      ChannelRoomMapping?
+
+  /// Search loads rooms for a batch of candidate hotels and filters them by stay type
+  /// in SQL; without these it degrades to a scan of every room in the system.
+  @@index([hotelId])
+  @@index([hotelId, isActive, available])
 }
 
 model RoomSlot {
@@ -298,6 +360,114 @@ model RoomSlot {
   bookings Booking[]
 
   @@unique([roomId, date, slotType, startTime])
+}
+
+/// One connected external property. OAuth credentials are stored encrypted
+/// (AES-256-GCM via src/lib/crypto.ts) - never write raw tokens to these columns.
+model ChannelConnection {
+  id                 String                  @id @default(cuid())
+  provider           ChannelProvider         @default(CLOUDBEDS)
+  externalPropertyId String
+  propertyName       String?
+  ownerId            String
+  owner              User                    @relation("ChannelConnectionOwner", fields: [ownerId], references: [id])
+  status             ChannelConnectionStatus @default(PENDING)
+  currency           String                  @default("INR")
+  propertyTimezone   String                  @default("Asia/Kolkata")
+
+  accessTokenEnc  String
+  refreshTokenEnc String
+  tokenExpiresAt  DateTime
+  scopes          String[]
+
+  /// Per-connection kill switch. Sync entry points must check this before any work.
+  syncEnabled         Boolean   @default(true)
+  lastSyncedAt        DateTime?
+  lastSyncError       String?
+  consecutiveFailures Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hotels       Hotel[]
+  roomMappings ChannelRoomMapping[]
+  bookingPushes ChannelBookingMapping[]
+  syncLogs     ChannelSyncLog[]
+
+  @@unique([provider, externalPropertyId])
+  @@index([status, syncEnabled])
+}
+
+/// Maps an external room type to the WayStay Room it was imported into.
+model ChannelRoomMapping {
+  id                 String            @id @default(cuid())
+  connectionId       String
+  connection         ChannelConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  externalRoomTypeId String
+  externalRatePlanId String?
+  roomId             String
+  room               Room              @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([connectionId, externalRoomTypeId])
+  @@unique([roomId])
+}
+
+/// Tracks pushing a WayStay booking out to the channel. bookingId doubles as the
+/// provider-side idempotency key (Cloudbeds `thirdPartyIdentifier`), so retries
+/// cannot create duplicate reservations.
+model ChannelBookingMapping {
+  id                    String            @id @default(cuid())
+  bookingId             String            @unique
+  booking               Booking           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  connectionId          String
+  connection            ChannelConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  externalReservationId String?
+  pushStatus            ChannelPushStatus @default(PENDING)
+  pushAttempts          Int               @default(0)
+  lastPushedAt          DateTime?
+  lastPushError         String?
+  nextRetryAt           DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([pushStatus, nextRetryAt])
+}
+
+/// Audit trail and dead-letter queue for every sync operation. This table is the
+/// integration's observability surface - it is what /admin/channels renders.
+model ChannelSyncLog {
+  id           String             @id @default(cuid())
+  connectionId String?
+  connection   ChannelConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  kind         ChannelSyncKind
+  outcome      ChannelSyncOutcome
+  /// Stable per-event key used to make webhook delivery idempotent.
+  eventKey     String?            @unique
+  message      String?
+  payload      Json?
+  createdAt    DateTime           @default(now())
+
+  @@index([connectionId, createdAt])
+  @@index([kind, outcome, createdAt])
+}
+
+/// Inventory a channel partner (PMS/channel manager) has sold outside WayStay.
+/// Held units reduce a room's effective inventory for that date - RoomSlot.isBooked
+/// is not consulted by the capacity check, so blocking must happen here.
+model ChannelInventoryHold {
+  id        String   @id @default(cuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  date      String
+  unitsHeld Int      @default(0)
+  source    String   @default("CLOUDBEDS")
+  syncedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([roomId, date])
+  @@index([date])
 }
 
 model Booking {
@@ -321,11 +491,16 @@ model Booking {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  payment    Payment?
-  extensions BookingExtension[]
-  review     Review?
+  payment       Payment?
+  extensions    BookingExtension[]
+  review        Review?
+  channelPush   ChannelBookingMapping?
 
   @@index([roomSlotId, status])
+  /// "My bookings" for one customer, newest first.
+  @@index([customerId, status, createdAt])
+  /// The stale-payment cron sweeps PENDING bookings older than a cutoff.
+  @@index([status, createdAt])
 }
 
 model BookingExtension {

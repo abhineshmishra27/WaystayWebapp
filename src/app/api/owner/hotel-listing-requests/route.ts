@@ -7,6 +7,7 @@ import { sendHotelListingRequestAdminEmail } from '@/lib/email'
 import { normalizePhone } from '@/lib/otp'
 import { rateLimit } from '@/lib/rate-limit'
 import { PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const GST_NUMBER_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/
 
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
       await sendHotelListingRequestAdminEmail(listingRequest)
     } catch (error) {
       notificationSent = false
-      console.error('Additional hotel listing email failed:', error)
+      logger.error('api.owner.hotel-listing-requests.additional_hotel_listing_email_failed', error)
     }
 
     return NextResponse.json({
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
       notificationSent,
     }, { status: 201 })
   } catch (error) {
-    console.error('Hotel listing request error:', error)
+    logger.error('api.owner.hotel-listing-requests.hotel_listing_request_error', error)
     return NextResponse.json({ error: 'We could not submit this hotel. Please try again.' }, { status: 500 })
   }
 }

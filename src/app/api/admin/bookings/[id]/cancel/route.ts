@@ -9,6 +9,8 @@ import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-
 import { canCancelBooking } from '@/lib/booking-cancellation'
 import { moneyToNumber } from '@/lib/money'
 import { initiateRazorpayRefund, RazorpayRefundPersistenceError, recordPaymentEvent } from '@/lib/payments'
+import { logger } from '@/lib/logger'
+import { notifyChannelOfCancelledBooking } from '@/lib/channels/sync'
 
 const schema = z.object({
   reason: z.string().trim().min(5).max(500),
@@ -91,7 +93,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         return NextResponse.json({ error: 'Razorpay could not process the refund. The booking remains active and needs support review.' }, { status: 502 })
       }
     } catch (error) {
-      console.error('Administrative refund failed:', error)
+      logger.error('api.admin.bookings.cancel.administrative_refund_failed', error)
       if (error instanceof RazorpayRefundPersistenceError) {
         return NextResponse.json({
           error: `Razorpay accepted refund ${error.refundId}, but WayStayy could not save the final state. Leave the booking active and reconcile this refund in Razorpay.`,
@@ -170,14 +172,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (error instanceof Error && error.message === 'BOOKING_STATE_CHANGED') {
       return NextResponse.json({ error: 'The booking state changed while cancellation was being processed. Refresh before retrying.' }, { status: 409 })
     }
-    console.error('Administrative cancellation finalization failed:', error)
+    logger.error('api.admin.bookings.cancel.administrative_cancellation_finalization_failed', error)
     return NextResponse.json({ error: 'The refund state was saved, but cancellation finalization needs attention. Retry this booking.' }, { status: 500 })
   }
+
+  // The partner is still holding this room until told otherwise.
+  await notifyChannelOfCancelledBooking(booking.id)
 
   try {
     await sendBookingCancellation(booking, refundAmount)
   } catch (error) {
-    console.error('Administrative cancellation email failed:', error)
+    logger.error('api.admin.bookings.cancel.administrative_cancellation_email_failed', error)
   }
 
   return NextResponse.json({

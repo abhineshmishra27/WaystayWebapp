@@ -5,6 +5,7 @@ import { sendReviewNudge } from '@/lib/email'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { hasPermission, PERMISSIONS } from '@/lib/rbac'
 import { lockRoomInventory, releaseBookingSlots } from '@/lib/booking-inventory-db'
+import { logger } from '@/lib/logger'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -37,11 +38,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       try {
         const hotelName = booking.roomSlot?.room?.hotel?.name || 'WayStayy'
         await sendReviewNudge(booking, hotelName)
-      } catch (e) { console.error('Review nudge error:', e) }
+      } catch (e) { logger.error('api.bookings.complete.review_nudge_error', e) }
     }, 2 * 60 * 60 * 1000)
 
     return NextResponse.json({ success: true })
-  } catch {
+  } catch (error) {
+    logger.error('api.bookings.complete.failed_to_complete_booking', error)
     return NextResponse.json({ error: 'Failed to complete booking' }, { status: 500 })
   }
 }

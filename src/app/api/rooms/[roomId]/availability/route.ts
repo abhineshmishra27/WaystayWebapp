@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
-import { slotIsUnavailable } from '@/lib/booking-inventory'
+import { dateRangeStrings, slotIsUnavailable } from '@/lib/booking-inventory'
+import { loadChannelHoldsForRoom } from '@/lib/booking-inventory-db'
 import { slotIsPastForBooking, todayInIndia } from '@/lib/booking-time'
 import { roomAllowsSlotType } from '@/lib/room-slot-settings'
+import { logger } from '@/lib/logger'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
   try {
@@ -44,7 +46,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
       prisma.booking.findMany({
         where: {
           status: { in: ['PENDING', 'CONFIRMED'] },
-          roomSlot: { roomId, date: { lte: effectiveEndDate } },
+          // Bounded below as well as above: without a lower bound this loads every
+          // booking the room has ever had. Thirty days back still catches a long stay
+          // that started before the window and runs into it.
+          roomSlot: {
+            roomId,
+            date: {
+              gte: new Date(Date.parse(`${effectiveStartDate}T00:00:00Z`) - 30 * 86_400_000)
+                .toISOString()
+                .slice(0, 10),
+              lte: effectiveEndDate,
+            },
+          },
         },
         select: {
           totalHours: true,
@@ -54,6 +67,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
       }),
     ])
     if (!room) return NextResponse.json({ error: 'Room not found' }, { status: 404 })
+
+    // One day past the range so overnight hourly slots still see the next day's holds.
+    const dayAfterRange = new Date(Date.parse(`${effectiveEndDate}T00:00:00Z`) + 86_400_000)
+      .toISOString()
+      .slice(0, 10)
+    const channelHolds = await loadChannelHoldsForRoom(
+      prisma,
+      roomId,
+      dateRangeStrings(effectiveStartDate, dayAfterRange),
+    )
 
     const availability = slots.reduce<Record<string, Array<{ id: string; date: string; startTime: string; endTime: string; slotType: string; isBooked: boolean; hasStarted: boolean; isEnabled: boolean }>>>(
       (acc, slot) => {
@@ -73,6 +96,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
             slot.slotType === 'FULLDAY' ? effectiveEndDate : slot.date,
             room.inventoryCount,
             requestedRoomCount,
+            channelHolds,
           ),
           hasStarted,
           isEnabled,
@@ -83,7 +107,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ room
     )
 
     return NextResponse.json({ roomId, availability })
-  } catch {
+  } catch (error) {
+    logger.error('api.rooms.availability.failed_to_fetch_availability', error)
     return NextResponse.json({ error: 'Failed to fetch availability' }, { status: 500 })
   }
 }

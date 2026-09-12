@@ -43,6 +43,12 @@ local-server*.log
 *.tsbuildinfo
 next-env.d.ts
 
+# Terraform local state can contain API key material.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
 /src/generated/prisma
 
 .vercel

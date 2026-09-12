@@ -141,7 +141,11 @@ The main Prisma models are:
 Create `.env.local` for local development. Do not commit real secrets.
 
 ```env
-DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE"
+# Pooled URL for app traffic, unpooled/direct for migrations and scripts.
+# Keep exactly one database's URLs here: a leftover URL from a previous provider
+# is a trap, because anything reading it directly reaches a dead server.
+WAYSTAY_DATABASE_URL="postgresql://USER:PASSWORD@HOST-pooler:PORT/DATABASE"
+WAYSTAY_DATABASE_URL_UNPOOLED="postgresql://USER:PASSWORD@HOST:PORT/DATABASE"
 
 NEXTAUTH_URL="http://localhost:3001"
 NEXTAUTH_SECRET="replace-with-a-long-random-secret"

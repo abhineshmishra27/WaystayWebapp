@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { z } from 'zod'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const schema = z.object({
   approved: z.boolean(),
@@ -73,12 +74,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         decisionReason,
       )
     } catch (emailError) {
-      console.error('Email failed (non-blocking):', emailError)
+      logger.error('api.admin.hotels.approve.email_failed_non_blocking', emailError)
     }
 
     return NextResponse.json({ ...updatedHotel, approvalStatus: parsed.data.approved ? 'APPROVED' : 'REJECTED' })
   } catch (error) {
-    console.error('Hotel approval error:', error)
+    logger.error('api.admin.hotels.approve.hotel_approval_error', error)
     return NextResponse.json({ error: 'Failed to update hotel approval' }, { status: 500 })
   }
 }

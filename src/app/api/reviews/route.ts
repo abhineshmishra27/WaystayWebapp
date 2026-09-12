@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { z } from 'zod'
 import { requireApiPermission } from '@/lib/api-rbac'
 import { PERMISSIONS } from '@/lib/rbac'
+import { logger } from '@/lib/logger'
 
 const createReviewSchema = z.object({
   bookingId: z.string(),
@@ -55,7 +56,8 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json(review, { status: 201 })
-  } catch {
+  } catch (error) {
+    logger.error('api.reviews.failed_to_submit_review', error)
     return NextResponse.json({ error: 'Failed to submit review' }, { status: 500 })
   }
 }

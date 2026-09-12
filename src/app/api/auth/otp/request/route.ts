@@ -3,6 +3,7 @@ import { createOtpChallenge, normalizeIdentifier } from '@/lib/otp'
 import { deliverOtp } from '@/lib/otp-delivery'
 import { rateLimit } from '@/lib/rate-limit'
 import { z } from 'zod'
+import { logger } from '@/lib/logger'
 
 const schema = z.object({
   identifier: z.string().min(3, 'Enter your email or mobile number'),
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (error) {
     await prisma.otpChallenge.deleteMany({ where: { identifier: deliveryIdentifier, purpose: parsed.data.purpose } })
-    console.error('OTP delivery error:', error instanceof Error ? error.message : error)
+    logger.error('api.auth.otp.request.delivery_failed', error)
     return NextResponse.json({ error: 'OTP could not be delivered. Please try again.' }, { status: 503 })
   }
 }

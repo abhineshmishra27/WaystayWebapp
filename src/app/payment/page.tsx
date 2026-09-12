@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import toast, { Toaster } from 'react-hot-toast'
+import { PLATFORM_CURRENCY } from '@/lib/money'
 
 interface RazorpayResponse {
   razorpay_payment_id: string
@@ -84,6 +85,30 @@ function PaymentDetails() {
   const isMissingBooking = !slotId || !startDate || !slotType || !price || !guestName || !guestEmail || !guestPhone
   const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || ''
   const isGatewayConfigured = razorpayKey.startsWith('rzp_')
+
+  // Channel-managed properties cannot be held on a promise, so the API refuses
+  // pay-at-hotel for them. Hide the option rather than letting someone pick it and
+  // fail at the last step. Defaults to showing it: if this lookup fails, behaviour is
+  // unchanged for ordinary hotels and the API is still the authority for channel ones.
+  const [requiresPrepayment, setRequiresPrepayment] = useState(false)
+
+  useEffect(() => {
+    if (!hotelId) return
+    let cancelled = false
+
+    fetch(`/api/hotels/${encodeURIComponent(hotelId)}`)
+      .then(response => (response.ok ? response.json() : null))
+      .then(hotel => {
+        if (!cancelled && hotel?.requiresPrepayment) setRequiresPrepayment(true)
+      })
+      .catch(() => {
+        // Non-fatal: the server still enforces this.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [hotelId])
 
   const releasePendingBooking = async (bookingId: string, razorpayOrderId: string) => {
     try {
@@ -206,7 +231,7 @@ function PaymentDetails() {
       const checkout = new window.Razorpay({
         key: razorpayKey,
         amount: bookingData.amount,
-        currency: bookingData.currency || 'INR',
+        currency: bookingData.currency || PLATFORM_CURRENCY,
         name: 'WayStayy',
         description: `${SLOT_LABELS[slotType] || 'Hotel'} booking`,
         order_id: bookingData.razorpayOrderId,
@@ -316,20 +341,27 @@ function PaymentDetails() {
               </span>
             </button>
 
-            <button
-              type="button"
-              onClick={handlePayAtHotel}
-              disabled={loading || isMissingBooking}
-              className="w-full rounded-xl border border-gray-200 bg-white px-5 py-4 text-left shadow-sm transition-all hover:border-indigo-200 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <span className="flex items-center justify-between gap-3">
-                <span>
-                  <span className="block text-base font-semibold text-gray-800">{loading ? 'Confirming booking...' : 'Pay at Hotel'}</span>
-                  <span className="block text-sm text-gray-400 mt-1">Reserve now and pay directly at the property.</span>
+            {requiresPrepayment ? (
+              <p className="rounded-xl border border-gray-200 bg-gray-50 px-5 py-4 text-sm text-gray-500">
+                This property confirms reservations only once payment is complete, so pay
+                at hotel is not available for this stay.
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={handlePayAtHotel}
+                disabled={loading || isMissingBooking}
+                className="w-full rounded-xl border border-gray-200 bg-white px-5 py-4 text-left shadow-sm transition-all hover:border-indigo-200 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="flex items-center justify-between gap-3">
+                  <span>
+                    <span className="block text-base font-semibold text-gray-800">{loading ? 'Confirming booking...' : 'Pay at Hotel'}</span>
+                    <span className="block text-sm text-gray-400 mt-1">Reserve now and pay directly at the property.</span>
+                  </span>
+                  <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-700">₹{price}</span>
                 </span>
-                <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-700">₹{price}</span>
-              </span>
-            </button>
+              </button>
+            )}
           </div>
 
           {isGatewayConfigured ? (

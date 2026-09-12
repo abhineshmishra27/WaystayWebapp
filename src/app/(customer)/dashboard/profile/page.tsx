@@ -20,13 +20,12 @@ interface ProfileUser {
   }
 }
 
-type FieldErrors = Partial<Record<'name' | 'phone' | 'avatarUrl', string[]>>
+type FieldErrors = Partial<Record<'name' | 'avatarUrl', string[]>>
 
 export default function ProfilePage() {
   const { update } = useSession()
   const [user, setUser] = useState<ProfileUser | null>(null)
   const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [loading, setLoading] = useState(true)
@@ -43,7 +42,6 @@ export default function ProfilePage() {
       .then((profile) => {
         setUser(profile)
         setName(profile.name)
-        setPhone(profile.phone || '')
         setAvatarUrl(profile.avatarUrl || '')
       })
       .catch((error) => toast.error(error.message))
@@ -95,7 +93,7 @@ export default function ProfilePage() {
       const res = await fetch('/api/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, avatarUrl }),
+        body: JSON.stringify({ name, avatarUrl }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -190,12 +188,11 @@ export default function ProfilePage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                 <input
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Mobile number"
+                  value={user?.phone || 'Not added'}
+                  disabled
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 text-gray-500"
                 />
-                {fieldErrors.phone && <p className="text-red-500 text-xs mt-1">{fieldErrors.phone[0]}</p>}
+                <p className="text-xs text-gray-400 mt-1">Contact support to change your verified phone number.</p>
               </div>
             </div>
 

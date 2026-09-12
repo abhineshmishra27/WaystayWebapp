@@ -1,9 +1,9 @@
-require('dotenv').config()
 const { PrismaClient } = require('@prisma/client')
 const { PrismaPg } = require('@prisma/adapter-pg')
+const { resolveDatabaseUrl } = require('./database-url')
 
 const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL.replace(/(^"|"$)/g, '') }),
+  adapter: new PrismaPg({ connectionString: resolveDatabaseUrl() }),
 })
 
 function formatDate(date) {

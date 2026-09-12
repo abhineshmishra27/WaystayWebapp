@@ -7,7 +7,6 @@ import { PERMISSIONS } from '@/lib/rbac'
 
 const profileSchema = z.object({
   name: z.string().trim().min(2, 'Name must be at least 2 characters').max(80, 'Name is too long'),
-  phone: z.string().trim().min(10, 'Phone must be at least 10 digits').max(20, 'Phone is too long').nullable().optional(),
   avatarUrl: z
     .union([z.url('Avatar must be a valid URL'), z.literal('')])
     .nullable()
@@ -75,7 +74,6 @@ export async function PATCH(req: NextRequest) {
       where: { id: session!.user.id },
       data: {
         name: parsed.data.name,
-        phone: normalizeOptional(parsed.data.phone),
         avatarUrl: normalizeOptional(parsed.data.avatarUrl),
       },
       select: {
