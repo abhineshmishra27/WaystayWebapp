@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { defaultSearchDateForSlot } from '@/lib/booking-time'
 import GooglePlacePhoto from '@/components/dhabas/GooglePlacePhoto'
+import { useDhabaRouteResults, type RouteDhaba } from '@/components/dhabas/DhabaRouteResultsContext'
 
 type DiscoveryMode = 'all' | 'stays' | 'dhabas'
 type SearchScope = 'route' | 'nearby'
@@ -36,25 +37,6 @@ type RouteStay = {
   minutesAhead: number
 }
 
-type RouteDhaba = {
-  id: string
-  hotelId: string | null
-  name: string
-  address: string | null
-  image: string | null
-  photoName: string | null
-  photoAttributions: Array<{ displayName: string; uri: string | null }>
-  rating: number
-  reviewCount: number
-  startingPrice: number | null
-  tags: string[]
-  detourKm: number
-  minutesAhead: number
-  mapsUri: string | null
-  websiteUri: string | null
-  source: 'google' | 'waystay'
-}
-
 type RouteResult = {
   mode: SearchScope
   route: null | {
@@ -69,6 +51,7 @@ type RouteResult = {
   dhabas: RouteDhaba[]
   dhabaProvider?: 'google' | 'waystay'
   dhabaNotice?: string | null
+  dhabaPagination?: { nextPageToken: string | null }
 }
 
 const categoryOptions: Array<{ id: DiscoveryMode; label: string; hint: string; icon: string }> = [
@@ -376,6 +359,7 @@ export default function RouteExplorerHomepage() {
   const [result, setResult] = useState<RouteResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
+  const { setRouteResult: cacheDhabaRouteResult } = useDhabaRouteResults()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -390,6 +374,7 @@ export default function RouteExplorerHomepage() {
       .then(({ response, payload }) => {
         if (!response.ok) throw new Error(payload.error || 'Unable to load route stops.')
         setResult(payload)
+        cacheDhabaRouteResult(params.toString(), payload)
       })
       .catch(error => {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
@@ -400,7 +385,7 @@ export default function RouteExplorerHomepage() {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [])
+  }, [cacheDhabaRouteResult])
 
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -411,10 +396,12 @@ export default function RouteExplorerHomepage() {
     setLoading(true)
     setNotice('')
     try {
-      const response = await fetch(`/api/route-stops?${routeQuery(from, to, date, mode)}`, { cache: 'no-store' })
+      const params = routeQuery(from, to, date, mode)
+      const response = await fetch(`/api/route-stops?${params}`, { cache: 'no-store' })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Unable to load route stops.')
       setResult(payload)
+      cacheDhabaRouteResult(params.toString(), payload)
       document.getElementById('ws-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to load route stops.')

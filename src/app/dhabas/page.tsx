@@ -13,5 +13,5 @@ export default async function DhabasPage({ searchParams }: { searchParams: Promi
     if (typeof value === 'string' && value) query.set(name, value)
   }
 
-  return <DhabasAlongRoutePage query={query.toString()} />
+  return <DhabasAlongRoutePage key={query.toString()} query={query.toString()} />
 }

@@ -122,6 +122,10 @@ function minutesAhead(distanceKm: number) {
 export async function GET(req: NextRequest) {
   try {
     const params = req.nextUrl.searchParams
+    const dhabaPageToken = params.get('dhabaPageToken')?.trim() || undefined
+    if (dhabaPageToken && dhabaPageToken.length > 4_000) {
+      return NextResponse.json({ error: 'The next dhaba page is invalid. Search this route again.' }, { status: 400 })
+    }
     const requestedSlot = params.get('slot') as SlotType | null
     const slotsToSearch: SlotType[] = requestedSlot && ALLOWED_SLOTS.has(requestedSlot)
       ? [requestedSlot]
@@ -321,18 +325,20 @@ export async function GET(req: NextRequest) {
     let dhabas = waystayDhabas
     let dhabaProvider: 'google' | 'waystay' = 'waystay'
     let dhabaNotice: string | null = null
+    let dhabaPagination: { nextPageToken: string | null } | undefined
     let googleRouteDistanceKm: number | null = null
     if (mode === 'route' && from && to) {
       if (!isGoogleDhabaSearchConfigured()) {
         dhabaNotice = 'Google Maps is not connected yet. Showing Waystay-listed restaurants while it is set up.'
       } else {
         try {
-          const googleResults = await findGoogleDhabasAlongRoute(from, to)
+          const googleResults = await findGoogleDhabasAlongRoute(from, to, { pageToken: dhabaPageToken })
           dhabas = googleResults.dhabas
           dhabaProvider = 'google'
           googleRouteDistanceKm = googleResults.routeDistanceKm
-          if (googleResults.truncated) {
-            dhabaNotice = 'Google returned the first 60 matching dhabas on this route.'
+          dhabaPagination = { nextPageToken: googleResults.nextPageToken }
+          if (googleResults.nextPageToken) {
+            dhabaNotice = 'More food stops are available to load for this route.'
           }
         } catch (error) {
           logger.warn('api.route_stops.google_dhabas_failed', error, {
@@ -341,6 +347,9 @@ export async function GET(req: NextRequest) {
             toLocationId: to.id,
             status: error instanceof GoogleDhabaSearchError ? error.status : undefined,
           })
+          if (dhabaPageToken) {
+            return NextResponse.json({ error: 'Unable to load more food stops. Please try again.' }, { status: 502 })
+          }
           dhabaNotice = 'Google Maps could not load route dhabas right now. Showing Waystay-listed restaurants instead.'
         }
       }
@@ -362,6 +371,7 @@ export async function GET(req: NextRequest) {
       dhabas,
       dhabaProvider,
       dhabaNotice,
+      dhabaPagination,
     })
   } catch (error) {
     logger.error('api.route_stops.failed', error)

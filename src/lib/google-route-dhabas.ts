@@ -10,7 +10,6 @@ const GOOGLE_ROUTES_URL = 'https://routes.googleapis.com/directions/v2:computeRo
 const GOOGLE_TEXT_SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText'
 const ROUTE_RADIUS_KM = 1
 const PAGE_SIZE = 20
-const MAX_PAGES = 3
 
 export type GoogleRouteDhaba = {
   id: string
@@ -156,41 +155,36 @@ async function drivingRoute(origin: RouteCoordinate, destination: RouteCoordinat
 }
 
 /**
- * Finds Google-listed dhabas close to the real driving path. Search Along Route first
- * narrows Google results; the local polyline calculation then strictly removes every
- * result more than one kilometre from that route.
+ * Finds food stops close to the real driving path. Search Along Route first narrows
+ * Google results; the local polyline calculation then strictly removes every result
+ * more than one kilometre from that route.
  */
-export async function findGoogleDhabasAlongRoute(origin: RouteCoordinate, destination: RouteCoordinate) {
+export async function findGoogleDhabasAlongRoute(
+  origin: RouteCoordinate,
+  destination: RouteCoordinate,
+  options: { pageToken?: string } = {},
+) {
   const key = apiKey()
   const route = await drivingRoute(origin, destination, key)
-  const candidates: GoogleTextSearchResponse['places'] = []
-  let pageToken: string | undefined
-  let pagesFetched = 0
-
-  do {
-    const response = await googlePost<GoogleTextSearchResponse>(
-      GOOGLE_TEXT_SEARCH_URL,
-      {
-        textQuery: 'dhaba',
-        includedType: 'restaurant',
-        strictTypeFiltering: true,
-        languageCode: 'en',
-        regionCode: 'IN',
-        pageSize: PAGE_SIZE,
-        ...(pageToken ? { pageToken } : {}),
-        searchAlongRouteParameters: {
-          polyline: { encodedPolyline: route.encodedPolyline },
-        },
+  const response = await googlePost<GoogleTextSearchResponse>(
+    GOOGLE_TEXT_SEARCH_URL,
+    {
+      // Deliberately broad: Google ranks dhabas, restaurants, food outlets and
+      // family dining without applying a place-type filter.
+      textQuery: 'food',
+      languageCode: 'en',
+      regionCode: 'IN',
+      pageSize: PAGE_SIZE,
+      ...(options.pageToken ? { pageToken: options.pageToken } : {}),
+      searchAlongRouteParameters: {
+        polyline: { encodedPolyline: route.encodedPolyline },
       },
-      'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.priceLevel,places.googleMapsUri,places.websiteUri,places.photos,nextPageToken',
-      key,
-    )
-    candidates.push(...(response.places ?? []))
-    pageToken = response.nextPageToken
-    pagesFetched += 1
-  } while (pageToken && pagesFetched < MAX_PAGES)
+    },
+    'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.priceLevel,places.googleMapsUri,places.websiteUri,places.photos,nextPageToken',
+    key,
+  )
 
-  const dhabas = candidates.flatMap(place => {
+  const dhabas = (response.places ?? []).flatMap(place => {
     const latitude = place.location?.latitude
     const longitude = place.location?.longitude
     if (!place.id || !place.displayName?.text || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return []
@@ -201,7 +195,7 @@ export async function findGoogleDhabasAlongRoute(origin: RouteCoordinate, destin
     const estimatedMinutesAhead = route.durationMinutes === null
       ? Math.round((projection.distanceFromStartKm / 65) * 60)
       : Math.round(route.durationMinutes * projection.progress)
-    const tags = [priceTag(place.priceLevel), 'Google Maps'].filter((tag): tag is string => Boolean(tag))
+    const tags = [priceTag(place.priceLevel)].filter((tag): tag is string => Boolean(tag))
     const photo = place.photos?.[0]
     const photoAttributions = (photo?.authorAttributions ?? []).flatMap(attribution => {
       if (!attribution.displayName) return []
@@ -239,6 +233,6 @@ export async function findGoogleDhabasAlongRoute(origin: RouteCoordinate, destin
   return {
     dhabas,
     routeDistanceKm: Math.round(route.distanceKm),
-    truncated: Boolean(pageToken),
+    nextPageToken: response.nextPageToken ?? null,
   }
 }
