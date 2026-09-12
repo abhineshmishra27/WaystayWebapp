@@ -70,6 +70,8 @@ export function getFirebasePhoneError(error: unknown) {
       return 'The SMS service quota has been reached. Please try again later.'
     case 'auth/operation-not-allowed':
       return 'Mobile OTP is not enabled for this Waystay environment.'
+    case 'auth/unauthorized-domain':
+      return 'Mobile OTP is not enabled for this address. Open Waystay at localhost or add this hostname in Firebase Authentication.'
     case 'auth/billing-not-enabled':
       return 'Firebase billing must be enabled before real SMS can be sent.'
     case 'auth/captcha-check-failed':
