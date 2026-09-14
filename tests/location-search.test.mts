@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  damerauLevenshteinDistance,
   descendantLocationIds,
   locationRadiusPlan,
   normalizeLocationQuery,
@@ -77,6 +78,18 @@ test('resolves common misspellings through fuzzy matching', () => {
   const result = resolveLocation('Banglore', locations)
   assert.equal(result?.location.id, 'bengaluru')
   assert.equal(result?.matchedBy, 'FUZZY')
+})
+
+test('counts a swapped pair of letters as one typo, not two', () => {
+  assert.equal(damerauLevenshteinDistance('jiapur', 'jaipur'), 1)
+  assert.equal(damerauLevenshteinDistance('delih', 'delhi'), 1)
+  assert.equal(damerauLevenshteinDistance('mumbai', 'mumbai'), 0)
+  assert.equal(damerauLevenshteinDistance('banglore', 'bangalore'), 1)
+})
+
+test('resolves names typed with two letters transposed', () => {
+  assert.equal(resolveLocation('Mumabi', locations)?.location.id, 'mumbai')
+  assert.equal(resolveLocation('Bomaby', locations)?.location.id, 'mumbai')
 })
 
 test('resolves locality, postcode, and airport aliases', () => {

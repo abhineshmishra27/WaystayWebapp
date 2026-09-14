@@ -57,11 +57,19 @@ export function normalizeLocationQuery(value: string) {
     .replace(/\s+/g, ' ')
 }
 
-export function levenshteinDistance(first: string, second: string) {
+/**
+ * Damerau-Levenshtein (optimal string alignment) distance.
+ *
+ * Counts an adjacent transposition as one edit, not two. Plain Levenshtein scores
+ * "Jiapur" two edits from "Jaipur", which drops it under the match threshold even
+ * though swapped letters are the most common way a place name gets mistyped.
+ */
+export function damerauLevenshteinDistance(first: string, second: string) {
   if (first === second) return 0
   if (first.length === 0) return second.length
   if (second.length === 0) return first.length
 
+  let beforePrevious: number[] = []
   let previous = Array.from({ length: second.length + 1 }, (_, index) => index)
   for (let firstIndex = 1; firstIndex <= first.length; firstIndex += 1) {
     const current = [firstIndex]
@@ -72,7 +80,16 @@ export function levenshteinDistance(first: string, second: string) {
         previous[secondIndex] + 1,
         previous[secondIndex - 1] + substitutionCost,
       )
+      if (
+        firstIndex > 1
+        && secondIndex > 1
+        && first[firstIndex - 1] === second[secondIndex - 2]
+        && first[firstIndex - 2] === second[secondIndex - 1]
+      ) {
+        current[secondIndex] = Math.min(current[secondIndex], beforePrevious[secondIndex - 2] + 1)
+      }
     }
+    beforePrevious = previous
     previous = current
   }
   return previous[second.length]
@@ -80,7 +97,7 @@ export function levenshteinDistance(first: string, second: string) {
 
 function similarity(first: string, second: string) {
   const longestLength = Math.max(first.length, second.length)
-  return longestLength === 0 ? 1 : 1 - (levenshteinDistance(first, second) / longestLength)
+  return longestLength === 0 ? 1 : 1 - (damerauLevenshteinDistance(first, second) / longestLength)
 }
 
 function termScore(query: string, term: string) {

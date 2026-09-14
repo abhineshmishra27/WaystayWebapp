@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { slotIsPastForBooking } from '@/lib/booking-time'
 
 const SLOT_LABELS: Record<string, string> = { H3: '3 Hours', H6: '6 Hours', H12: '12 Hours', FULLDAY: 'Full Day' }
+const SLOT_TABS = ['H3', 'H6', 'H12', 'FULLDAY'] as const
 type SlotType = 'H3' | 'H6' | 'H12' | 'FULLDAY'
 const DEFAULT_MAX_GUESTS_PER_ROOM = 3
 
@@ -203,67 +204,80 @@ export default function SlotPicker({
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4">
-        <label className="text-sm text-gray-600">Start:</label>
-        <input
-          type="date"
-          value={startDate}
-          min={today}
-          onChange={e => {
-            setStartDate(e.target.value)
-            if (activeTab === 'FULLDAY' && endDate <= e.target.value) setEndDate(addDays(e.target.value, 1))
-            if (activeTab !== 'FULLDAY') setEndDate(e.target.value)
-          }}
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
-        />
-        <label className="text-sm text-gray-600">End:</label>
-        <input
-          type="date"
-          value={endDate}
-          min={addDays(startDate, 1)}
-          onChange={e => setEndDate(e.target.value)}
-          disabled={activeTab !== 'FULLDAY'}
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm disabled:bg-gray-50 disabled:text-gray-400"
-        />
+      <div className="mb-3 grid grid-cols-2 gap-3">
+        <label className="rounded-xl border-2 border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-3 py-1.5 transition focus-within:border-[var(--waystay-orange)]">
+          <span className="block text-[10px] font-bold uppercase tracking-wide text-[var(--waystay-orange-dark)]">Check in</span>
+          <input
+            type="date"
+            value={startDate}
+            min={today}
+            onChange={e => {
+              setStartDate(e.target.value)
+              if (activeTab === 'FULLDAY' && endDate <= e.target.value) setEndDate(addDays(e.target.value, 1))
+              if (activeTab !== 'FULLDAY') setEndDate(e.target.value)
+            }}
+            className="w-full bg-transparent text-sm font-bold text-[var(--waystay-blue)] outline-none"
+          />
+        </label>
+        <label className={`rounded-xl border-2 px-3 py-1.5 transition ${activeTab === 'FULLDAY' ? 'border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] focus-within:border-[var(--waystay-orange)]' : 'border-[#ece7df] bg-[#f7f4ef]'}`}>
+          <span className={`block text-[10px] font-bold uppercase tracking-wide ${activeTab === 'FULLDAY' ? 'text-[var(--waystay-orange-dark)]' : 'text-[#9aa0aa]'}`}>Check out</span>
+          <input
+            type="date"
+            value={endDate}
+            min={addDays(startDate, 1)}
+            onChange={e => setEndDate(e.target.value)}
+            disabled={activeTab !== 'FULLDAY'}
+            className="w-full bg-transparent text-sm font-bold text-[var(--waystay-blue)] outline-none disabled:text-[#9aa0aa]"
+          />
+        </label>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-        <div className="text-sm text-gray-600">
-          <span className="block mb-1">Guests</span>
-          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-2 py-1.5">
-            <button type="button" onClick={() => updateGuestCount(guestCount - 1)} className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50" aria-label="Decrease guests">-</button>
-            <span className="font-medium text-gray-800">{guestCount}</span>
-            <button type="button" onClick={() => updateGuestCount(guestCount + 1)} className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50" aria-label="Increase guests">+</button>
+        <div>
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--waystay-orange-dark)]">Guests</span>
+          <div className="flex items-center justify-between rounded-xl border-2 border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-2 py-1.5">
+            <button type="button" onClick={() => updateGuestCount(guestCount - 1)} className="h-7 w-7 rounded-full border-2 border-[var(--waystay-orange-tint)] bg-white text-sm font-bold text-[var(--waystay-blue)] transition hover:border-[var(--waystay-orange)]" aria-label="Decrease guests">-</button>
+            <span className="text-sm font-bold text-[var(--waystay-blue)]">{guestCount}</span>
+            <button type="button" onClick={() => updateGuestCount(guestCount + 1)} className="h-7 w-7 rounded-full border-2 border-[var(--waystay-orange-tint)] bg-white text-sm font-bold text-[var(--waystay-blue)] transition hover:border-[var(--waystay-orange)]" aria-label="Increase guests">+</button>
           </div>
         </div>
-        <div className="text-sm text-gray-600">
-          <span className="block mb-1">Rooms</span>
-          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-2 py-1.5">
-            <button type="button" onClick={() => updateRoomCount(roomCount - 1)} disabled={roomCount <= requiredRooms} className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40" aria-label="Decrease rooms">-</button>
-            <span className="font-medium text-gray-800">{roomCount}</span>
-            <button type="button" onClick={() => updateRoomCount(roomCount + 1)} disabled={roomCount >= roomSelectionLimit} className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40" aria-label="Increase rooms">+</button>
+        <div>
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--waystay-orange-dark)]">Rooms</span>
+          <div className="flex items-center justify-between rounded-xl border-2 border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-2 py-1.5">
+            <button type="button" onClick={() => updateRoomCount(roomCount - 1)} disabled={roomCount <= requiredRooms} className="h-7 w-7 rounded-full border-2 border-[var(--waystay-orange-tint)] bg-white text-sm font-bold text-[var(--waystay-blue)] transition hover:border-[var(--waystay-orange)] disabled:opacity-40" aria-label="Decrease rooms">-</button>
+            <span className="text-sm font-bold text-[var(--waystay-blue)]">{roomCount}</span>
+            <button type="button" onClick={() => updateRoomCount(roomCount + 1)} disabled={roomCount >= roomSelectionLimit} className="h-7 w-7 rounded-full border-2 border-[var(--waystay-orange-tint)] bg-white text-sm font-bold text-[var(--waystay-blue)] transition hover:border-[var(--waystay-orange)] disabled:opacity-40" aria-label="Increase rooms">+</button>
           </div>
         </div>
-        <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
-          <span className="block font-medium text-gray-700">Max {guestsPerRoomLimit} guests per room</span>
+        <div className="self-end rounded-xl border border-[#ece7df] bg-[#f7f4ef] px-3 py-2 text-xs text-[#566378]">
+          <span className="block font-bold text-[var(--waystay-blue)]">Max {guestsPerRoomLimit} guests per room</span>
           {requiredRooms > roomSelectionLimit
             ? `This category has only ${roomSelectionLimit} room${roomSelectionLimit === 1 ? '' : 's'}; reduce the guest count.`
             : requiredRooms > 1 ? `${guestCount} guests need at least ${requiredRooms} rooms.` : 'One room is enough for this group.'}
         </div>
       </div>
 
-      <div className="flex gap-1 mb-4 bg-gray-50 p-1 rounded-xl">
-        {(['H3', 'H6', 'H12', 'FULLDAY'] as const).map(t => (
+      <div role="group" aria-label="Stay duration" className="relative mb-4 grid grid-cols-4 rounded-xl border-2 border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] p-1">
+        <span
+          aria-hidden
+          className={`pointer-events-none absolute inset-y-1 left-1 rounded-lg shadow-sm transition-transform duration-300 ease-out ${activeTab === 'FULLDAY' ? 'bg-[var(--waystay-orange)]' : 'bg-[var(--waystay-blue)]'}`}
+          style={{
+            width: 'calc((100% - 0.5rem) / 4)',
+            transform: `translateX(${SLOT_TABS.indexOf(activeTab) * 100}%)`,
+          }}
+        />
+        {SLOT_TABS.map(t => (
           <button
             key={t}
             type="button"
             disabled={!enabledTabs[t]}
+            aria-pressed={activeTab === t}
             onClick={() => {
               setActiveTab(t)
               if (t === 'FULLDAY' && endDate <= startDate) setEndDate(addDays(startDate, 1))
               if (t !== 'FULLDAY') setEndDate(startDate)
             }}
-            className={`flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:text-gray-300 ${activeTab === t ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`relative z-10 rounded-lg px-2 py-2 text-[13px] font-bold tracking-tight transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${activeTab === t ? 'text-white' : 'text-[var(--waystay-blue)] hover:bg-white/70'}`}
           >
             {SLOT_LABELS[t]}
           </button>
@@ -289,7 +303,7 @@ export default function SlotPicker({
                 type="button"
                 disabled={isUnavailable}
                 onClick={() => handleSlotSelect(slot)}
-                className={`min-w-32 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors ${isUnavailable ? 'border-gray-100 bg-gray-100 text-gray-300 cursor-not-allowed' : 'border-orange-200 bg-[var(--waystay-orange-soft)] text-gray-800 shadow-sm hover:border-[var(--waystay-orange)] hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-100'}`}
+                className={`min-w-32 rounded-xl border-2 px-4 py-2.5 text-sm font-bold transition ${isUnavailable ? 'cursor-not-allowed border-[#ece7df] bg-[#f7f4ef] text-[#b6bcc6]' : 'border-[var(--waystay-orange-tint)] bg-white text-[var(--waystay-blue)] shadow-sm hover:-translate-y-0.5 hover:border-[var(--waystay-orange)] focus:outline-none focus:ring-2 focus:ring-orange-100'}`}
               >
                 {slot.startTime} – {slot.endTime}
                 {!isEnabled

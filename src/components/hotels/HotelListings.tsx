@@ -61,7 +61,7 @@ function StarRating({ rating }: { rating: number }) {
   return (
     <div className="flex items-center gap-1">
       <span className="text-yellow-400 text-sm">{'★'.repeat(Math.round(rating))}{'☆'.repeat(5 - Math.round(rating))}</span>
-      <span className="text-gray-500 text-xs">{rating.toFixed(1)}</span>
+      <span className="text-xs text-[var(--muted)]">{rating.toFixed(1)}</span>
     </div>
   )
 }
@@ -108,8 +108,8 @@ export default async function HotelListings({ searchParams }: { searchParams: Re
     return (
       <div className="text-center py-20">
         <div className="text-5xl mb-4">🔍</div>
-        <h3 className="text-xl font-semibold text-gray-800 mb-2">No hotels found</h3>
-        <p className="text-gray-500 mb-6">
+        <h3 className="mb-2 text-xl font-bold tracking-[-.5px] text-[var(--ink)]">No hotels found</h3>
+        <p className="mb-6 text-[var(--muted)]">
           {isNearMeSearch
             ? `No hotels found within ${radiusLabel} km. Try searching for a city or adjusting your dates.`
             : isSameDayHourlySearch
@@ -124,12 +124,12 @@ export default async function HotelListings({ searchParams }: { searchParams: Re
           {tomorrowSearchParams && (
             <Link
               href={`/hotels?${new URLSearchParams(tomorrowSearchParams).toString()}`}
-              className="bg-[var(--waystay-orange)] text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-[var(--waystay-orange-dark)]"
+              className="rounded-[10px] bg-[var(--orange)] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[var(--waystay-orange-dark)]"
             >
               Search tomorrow
             </Link>
           )}
-          <Link href="/" className="bg-indigo-600 text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-indigo-700">Back to home</Link>
+          <Link href="/" className="rounded-[10px] border border-[#e2d9cc] bg-white px-6 py-3 text-sm font-semibold text-[var(--ink)] transition hover:border-[var(--orange)]">Back to home</Link>
         </div>
       </div>
     )
@@ -152,60 +152,53 @@ export default async function HotelListings({ searchParams }: { searchParams: Re
           No hotels within {searchRadius.initialKm} km of {searchRadius.locationName}. Showing hotels within {searchRadius.appliedKm} km.
         </p>
       )}
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="ws-listing-count">
         {resultCount} {isNearMeSearch ? 'nearby ' : ''}hotel{resultCount !== 1 ? 's' : ''} found
         {isNearMeSearch ? ` within ${radiusLabel} km` : resolvedLabel ? ` near ${resolvedLabel}` : searchParams.city ? ` in ${searchParams.city}` : ''}
         {resolvedLocation && resolvedLocation.matchedBy !== 'CANONICAL' && searchParams.city && (
-          <span className="ml-2 text-xs text-indigo-600">Showing results for {resolvedLabel}</span>
+          <span className="ml-2 text-xs font-semibold text-[var(--waystay-orange-dark)]">Showing results for {resolvedLabel}</span>
         )}
       </p>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {hotels.map((hotel) => (
           <Link
             key={hotel.id}
             href={`/hotels/${hotel.id}${hotelLinkQuery ? `?${hotelLinkQuery}` : ''}`}
-            className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-md transition-shadow"
+            className="ws-listing-card"
           >
-            <div className="relative aspect-[16/10] bg-gray-100 overflow-hidden">
+            <div className="relative aspect-[16/10] overflow-hidden bg-[#eee4d6]">
               {hotel.image
                 ? <Image src={hotel.image} alt={hotel.name} fill style={{ objectFit: 'cover' }} />
-                : <div className="w-full h-full flex items-center justify-center text-gray-300 text-4xl">🏨</div>
+                : <div className="flex h-full w-full items-center justify-center text-4xl opacity-40">🏨</div>
               }
             </div>
             <div className="p-4">
-              <h3 className="font-semibold text-gray-900 mb-1 truncate">{hotel.name}</h3>
-              <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500">
+              <h3 className="mb-1 truncate text-base font-bold tracking-[-.4px] text-[var(--ink)]">{hotel.name}</h3>
+              <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[var(--muted)]">
                 <span>{hotel.city}, {hotel.state}</span>
                 {typeof hotel.distanceKm === 'number' && hotel.relevanceReasons.length === 0 && (
-                  <span className="rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-[var(--waystay-orange-dark)]">
-                    {formatDistance(hotel.distanceKm)}
-                  </span>
+                  <span className="ws-listing-chip">{formatDistance(hotel.distanceKm)}</span>
                 )}
               </div>
               {hotel.avgRating > 0 && <StarRating rating={hotel.avgRating} />}
               {hotel.relevanceReasons.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Why this hotel is relevant">
                   {hotel.relevanceReasons.slice(0, 3).map(reason => (
-                    <span
-                      key={reason}
-                      className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700"
-                    >
-                      {reason}
-                    </span>
+                    <span key={reason} className="ws-listing-chip">{reason}</span>
                   ))}
                 </div>
               )}
-              <div className="mt-4 rounded-xl border border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-3 py-2">
+              <div className="ws-listing-price mt-4">
                 {hotel.selectedSlotPrice ? (
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-lg font-bold text-[var(--waystay-orange-dark)]">₹{hotel.selectedSlotPrice}</span>
-                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--waystay-blue)]">{slotLabel}</span>
+                    <span className="text-lg font-bold text-[var(--orange)]">₹{hotel.selectedSlotPrice}</span>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--ink)]">{slotLabel}</span>
                   </div>
                 ) : (
-                  <p className="text-sm font-semibold text-gray-500">Price available after selecting dates</p>
+                  <p className="text-sm font-semibold text-[var(--muted)]">Price available after selecting dates</p>
                 )}
                 {!isDayRental && hotel.priceFullDay && (
-                  <p className="mt-1 text-xs text-gray-500">Full day from ₹{hotel.priceFullDay}</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">Full day from ₹{hotel.priceFullDay}</p>
                 )}
               </div>
             </div>

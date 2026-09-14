@@ -16,7 +16,7 @@ export default function RestaurantMenu({ restaurant }: { restaurant: RestaurantT
   const categories = [...new Set(restaurant.menuItems.map((item: MenuItemType) => item.category))] as string[]
 
   return (
-    <div>
+    <div id="restaurant-menu" className="scroll-mt-24">
       <h2 className="text-xl font-semibold mb-4">🍽 Restaurant: {restaurant.name}</h2>
       {categories.map(category => (
         <div key={category} className="mb-6">

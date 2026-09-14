@@ -4,11 +4,14 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import {
   normalizeLocationQuery,
+  resolveLocation,
   type LocationResolution,
 } from '@/lib/location-search'
 
 const MINIMUM_LOCATION_CONFIDENCE = 0.4
 const MINIMUM_HOTEL_CONFIDENCE = 0.38
+// The canonical set is small and curated; the cap only stops an unbounded scan if it grows.
+const LOCATION_FALLBACK_SCAN_LIMIT = 500
 
 type LocationMatchRow = {
   locationId: string
@@ -107,6 +110,33 @@ export async function findHotelBookingPopularity(hotelIds: string[]) {
   return new Map(rows.map(row => [row.hotelId, Number(row.bookingCount)]))
 }
 
+/**
+ * Second pass for queries trigram similarity cannot reach.
+ *
+ * Postgres scores "jiapur" only 0.27 against "jaipur" because swapping two letters
+ * destroys most of the shared trigrams, so a plain typo drops below the threshold and
+ * resolves to nothing. The edit-distance matcher reads swaps as the single typo they are.
+ */
+async function resolveLocationByEditDistance(input: string): Promise<DatabaseLocationResolution | null> {
+  const candidates = await prisma.location.findMany({
+    select: {
+      id: true,
+      name: true,
+      normalizedName: true,
+      type: true,
+      parentLocationId: true,
+      latitude: true,
+      longitude: true,
+      radiusKm: true,
+      aliases: { select: { alias: true, normalizedAlias: true } },
+    },
+    take: LOCATION_FALLBACK_SCAN_LIMIT,
+  })
+
+  const resolution = resolveLocation(input, candidates)
+  return resolution ? { ...resolution, matchTier: 5 } : null
+}
+
 export async function resolveLocationFromDatabase(input: string): Promise<DatabaseLocationResolution | null> {
   const query = normalizeLocationQuery(input)
   if (!query) return null
@@ -169,7 +199,7 @@ export async function resolveLocationFromDatabase(input: string): Promise<Databa
   `)
 
   const match = rows[0]
-  if (!match) return null
+  if (!match) return resolveLocationByEditDistance(input)
 
   const location = await prisma.location.findUnique({
     where: { id: match.locationId },
@@ -348,6 +378,33 @@ export async function suggestSearchPlaces(input: string, perGroupLimit = 5) {
     `),
     findHotelTextMatches(query, safeLimit),
   ])
+
+  if (locationRows.length === 0) {
+    const fallback = await resolveLocationByEditDistance(query)
+    const location = fallback
+      ? await prisma.location.findUnique({
+          where: { id: fallback.location.id },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            state: true,
+            parentLocation: { select: { name: true } },
+          },
+        })
+      : null
+    if (fallback && location) {
+      locationRows.push({
+        id: location.id,
+        name: location.name,
+        type: location.type,
+        state: location.state,
+        parentName: location.parentLocation?.name ?? null,
+        matchedText: fallback.matchedText,
+        confidence: fallback.score,
+      })
+    }
+  }
 
   const matchedLocationIds = locationRows
     .filter(row => row.type !== 'LANDMARK')

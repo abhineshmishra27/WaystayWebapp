@@ -1,0 +1,60 @@
+/* Mirrors the landing palette and surfaces so search results feel like the same product. */
+.ws-listing {
+  --ink: #0a2043;
+  --orange: #ff6b00;
+  --muted: #566378;
+  background: #fffaf5;
+  color: var(--ink);
+  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+}
+.ws-listing-width { width: 90%; max-width: 1380px; margin-inline: auto; }
+.ws-listing-banner {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 300px;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255,250,245,.92) 0%, rgba(255,250,245,.55) 38%, transparent 72%),
+    linear-gradient(0deg, #fffaf5 0%, transparent 42%),
+    url('/waystay-highway-banner.webp') center top / cover no-repeat;
+}
+.ws-listing-eyebrow {
+  margin: 0 0 8px;
+  color: var(--orange);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.ws-listing-title {
+  margin: 0 0 20px;
+  font-size: clamp(26px, 2.6vw, 38px);
+  font-weight: 750;
+  letter-spacing: -1.1px;
+  line-height: 1.1;
+}
+.ws-listing-count { margin: 0 0 22px; color: var(--muted); font-size: 14px; }
+.ws-listing-card {
+  display: block;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 3px 12px #573e0d09;
+  transition: transform .2s, box-shadow .2s;
+}
+.ws-listing-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px #0a204312; }
+.ws-listing-chip {
+  display: inline-flex;
+  border-radius: 30px;
+  background: #fff0e2;
+  color: #c85200;
+  padding: 4px 11px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ws-listing-price { border-radius: 10px; border: 1px solid #ffe1c6; background: #fff6ee; padding: 10px 13px; }
+
+@media (max-width: 600px) {
+  .ws-listing-width { width: calc(100% - 32px); }
+  .ws-listing-banner { height: 240px; }
+}

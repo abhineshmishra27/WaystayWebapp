@@ -3,10 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { defaultSearchDateForSlot, todayInIndia } from '@/lib/booking-time'
 
-const HOUR_SLOT_OPTIONS = [
+const SLOT_OPTIONS = [
   { value: 'H3', label: '3 Hours' },
   { value: 'H6', label: '6 Hours' },
   { value: 'H12', label: '12 Hours' },
+  { value: 'FULLDAY', label: 'Full day' },
 ] as const
 
 type SlotValue = 'H3' | 'H6' | 'H12' | 'FULLDAY'
@@ -296,6 +297,11 @@ export default function SearchBar({
     setEndDate(nextStartDate)
   }
 
+  const selectSlot = (nextSlot: SlotValue) => {
+    if (nextSlot === 'FULLDAY') updateRentalMode('day')
+    else updateHourSlot(nextSlot)
+  }
+
   const suggestionSections = [
     { key: 'locations', label: 'Locations', items: suggestions.locations },
     { key: 'hotels', label: 'Hotels', items: suggestions.hotels },
@@ -303,8 +309,9 @@ export default function SearchBar({
   ]
 
   return (
-    <div className={`rounded-2xl border border-white/20 bg-white p-3 shadow-xl ${className}`}>
-      <div ref={searchBoxRef} className="relative">
+    <div className={`rounded-[18px] bg-white p-3 shadow-[0_4px_22px_#553a1212] ${className}`}>
+      <div className="flex flex-col gap-2 md:flex-row md:items-stretch">
+      <div ref={searchBoxRef} className="relative min-w-0 flex-1">
         <label className="flex min-w-0 items-center gap-3 rounded-xl border-2 border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-4 py-2.5 shadow-sm transition focus-within:border-[var(--waystay-orange)] focus-within:bg-white focus-within:ring-4 focus-within:ring-orange-100">
           <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 shrink-0 fill-none stroke-[var(--waystay-orange)]">
             <path d="M21 21l-4.3-4.3M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" strokeWidth="2.2" strokeLinecap="round" />
@@ -418,10 +425,9 @@ export default function SearchBar({
           </div>
         )}
       </div>
-      <div className="mt-2 flex flex-col gap-2 md:flex-row md:flex-wrap">
-        <div className="grid grid-cols-2 gap-2 md:w-[23rem] md:shrink-0">
-          <label className="rounded-xl border border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-3 py-2">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-[var(--waystay-orange-dark)]">Date</span>
+        <div className={`grid gap-2 md:shrink-0 ${rentalMode === 'day' ? 'grid-cols-2 md:w-[22rem]' : 'grid-cols-1 md:w-[11rem]'}`}>
+          <label className="flex flex-col justify-center rounded-xl border-2 border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-3 py-1.5 transition focus-within:border-[var(--waystay-orange)]">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-[var(--waystay-orange-dark)]">{rentalMode === 'day' ? 'Check in' : 'Date'}</span>
             <input
               type="date"
               aria-label="Start date"
@@ -433,88 +439,87 @@ export default function SearchBar({
                 setStartDate(nextStartDate)
                 if (rentalMode === 'day' && endDate <= nextStartDate) setEndDate(addDays(nextStartDate, 1))
               }}
-              className="mt-0.5 w-full bg-transparent text-sm font-semibold text-[var(--waystay-blue)] outline-none"
+              className="w-full bg-transparent text-sm font-bold text-[var(--waystay-blue)] outline-none"
             />
           </label>
-          <label className="rounded-xl border border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-3 py-2">
-            <span className="block text-[10px] font-bold uppercase tracking-wide text-[var(--waystay-orange-dark)]">{rentalMode === 'hourly' ? 'Hourly slot' : 'To date'}</span>
-            {rentalMode === 'hourly' ? (
-              <select
-                value={slot}
-                onChange={e => updateHourSlot(normalizeSlot(e.target.value))}
-                className="mt-0.5 w-full bg-transparent text-sm font-semibold text-[var(--waystay-blue)] outline-none"
-              >
-                {HOUR_SLOT_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            ) : (
+          {rentalMode === 'day' && (
+            <label className="flex flex-col justify-center rounded-xl border-2 border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-3 py-1.5 transition focus-within:border-[var(--waystay-orange)]">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[var(--waystay-orange-dark)]">Check out</span>
               <input
                 type="date"
                 aria-label="To date"
                 value={endDate}
                 min={addDays(startDate, 1)}
                 onChange={e => setEndDate(e.target.value)}
-                className="mt-0.5 w-full bg-transparent text-sm font-semibold text-[var(--waystay-blue)] outline-none"
+                className="w-full bg-transparent text-sm font-bold text-[var(--waystay-blue)] outline-none"
               />
-            )}
-          </label>
+            </label>
+          )}
         </div>
-        <div className="grid grid-cols-2 rounded-xl border border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] p-1">
-          <button
-            type="button"
-            onClick={() => updateRentalMode('hourly')}
-            className={`rounded-lg px-4 py-2.5 text-sm font-bold transition-colors ${rentalMode === 'hourly' ? 'bg-[var(--waystay-blue)] text-white shadow-sm' : 'text-[var(--waystay-blue)] hover:bg-white'}`}
-          >
-            Click for Hourly Stays
-          </button>
-          <button
-            type="button"
-            onClick={() => updateRentalMode('day')}
-            className={`rounded-lg px-4 py-2.5 text-sm font-bold transition-colors ${rentalMode === 'day' ? 'bg-[var(--waystay-orange)] text-white shadow-sm' : 'text-[var(--waystay-blue)] hover:bg-white'}`}
-          >
-            Click for Night Halt
-          </button>
+      </div>
+      <div className="mt-2">
+        <div role="group" aria-label="Stay duration" className="relative grid w-full grid-cols-4 rounded-xl border-2 border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] p-1">
+          <span
+            aria-hidden
+            className={`pointer-events-none absolute inset-y-1 left-1 rounded-lg shadow-sm transition-transform duration-300 ease-out ${slot === 'FULLDAY' ? 'bg-[var(--waystay-orange)]' : 'bg-[var(--waystay-blue)]'}`}
+            style={{
+              width: 'calc((100% - 0.5rem) / 4)',
+              transform: `translateX(${SLOT_OPTIONS.findIndex(option => option.value === slot) * 100}%)`,
+            }}
+          />
+          {SLOT_OPTIONS.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={slot === option.value}
+              onClick={() => selectSlot(option.value)}
+              className={`relative z-10 rounded-lg px-2 py-2.5 text-sm font-bold tracking-tight transition-colors ${slot === option.value ? 'text-white' : 'text-[var(--waystay-blue)] hover:bg-white/70'}`}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
-        <div className="flex items-center justify-between gap-3 px-3 py-2 text-gray-800 text-sm rounded-xl border border-gray-100 bg-white min-w-44">
-          <span className="text-gray-500">Guests</span>
+      </div>
+      <div className="mt-2 flex flex-col gap-2 md:flex-row md:flex-wrap">
+        <div className="flex min-w-44 flex-1 items-center justify-between gap-3 rounded-xl border-2 border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-3 py-2">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--waystay-orange-dark)]">Guests</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => updateGuestCount(guestCount - 1)}
-              className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50"
+              className="h-7 w-7 rounded-full border-2 border-[var(--waystay-orange-tint)] bg-white text-sm font-bold text-[var(--waystay-blue)] transition hover:border-[var(--waystay-orange)]"
               aria-label="Decrease guests"
             >
               -
             </button>
-            <span className="w-5 text-center font-medium">{guestCount}</span>
+            <span className="w-5 text-center text-sm font-bold text-[var(--waystay-blue)]">{guestCount}</span>
             <button
               type="button"
               onClick={() => updateGuestCount(guestCount + 1)}
-              className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50"
+              className="h-7 w-7 rounded-full border-2 border-[var(--waystay-orange-tint)] bg-white text-sm font-bold text-[var(--waystay-blue)] transition hover:border-[var(--waystay-orange)]"
               aria-label="Increase guests"
             >
               +
             </button>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-3 px-3 py-2 text-gray-800 text-sm rounded-xl border border-gray-100 bg-white min-w-44">
-          <span className="text-gray-500">Rooms</span>
+        <div className="flex min-w-44 flex-1 items-center justify-between gap-3 rounded-xl border-2 border-[var(--waystay-orange-tint)] bg-[var(--waystay-orange-soft)] px-3 py-2">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--waystay-orange-dark)]">Rooms</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => updateRoomCount(roomCount - 1)}
-              className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+              className="h-7 w-7 rounded-full border-2 border-[var(--waystay-orange-tint)] bg-white text-sm font-bold text-[var(--waystay-blue)] transition hover:border-[var(--waystay-orange)] disabled:opacity-40"
               aria-label="Decrease rooms"
               disabled={roomCount <= requiredRooms}
             >
               -
             </button>
-            <span className="w-5 text-center font-medium">{roomCount}</span>
+            <span className="w-5 text-center text-sm font-bold text-[var(--waystay-blue)]">{roomCount}</span>
             <button
               type="button"
               onClick={() => updateRoomCount(roomCount + 1)}
-              className="h-7 w-7 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50"
+              className="h-7 w-7 rounded-full border-2 border-[var(--waystay-orange-tint)] bg-white text-sm font-bold text-[var(--waystay-blue)] transition hover:border-[var(--waystay-orange)]"
               aria-label="Increase rooms"
             >
               +
