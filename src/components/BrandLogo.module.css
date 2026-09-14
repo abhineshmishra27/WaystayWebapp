@@ -1,0 +1,30 @@
+.brand {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+}
+
+.logo {
+  height: 54px;
+  width: auto;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
+.wordmark {
+  font-family: var(--font-inter), Inter, Arial, Helvetica, sans-serif;
+  font-size: 36px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+@media (max-width: 600px) {
+  .brand { gap: 8px; }
+  .logo { height: 38px; }
+  .wordmark { font-size: 27px; }
+}

@@ -15,8 +15,6 @@ body:has(.ws-demo)::before {
   font-family: var(--font-inter), Arial, sans-serif;
 }
 .ws-landing-header-inner { width: 90%; max-width: 1380px; min-height: 92px; }
-.ws-landing-logo { height: 54px; object-fit: contain; mix-blend-mode: multiply; }
-.ws-landing-wordmark { font-size: 36px; font-weight: 650; line-height: 1; }
 .ws-demo {
   --ink: #0a2043;
   --orange: #ff6b00;
@@ -191,9 +189,6 @@ body:has(.ws-demo)::before {
 }
 @media (max-width: 600px) {
   .ws-landing-header-inner { min-height: 76px; width: calc(100% - 32px); }
-  .ws-landing-logo { height: 38px; }
-  .ws-landing-brand { gap: 8px; }
-  .ws-landing-wordmark { font-size: 27px; }
   .ws-width, .ws-search { width: calc(100% - 32px); }
   .ws-hero { padding: 26px 0 24px; }
   .ws-hero h1 { font-size: 32px; letter-spacing: -1.4px; margin-bottom: 18px; }

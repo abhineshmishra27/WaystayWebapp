@@ -48,7 +48,7 @@ export default function Header() {
     return (
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <BrandLogo className="flex shrink-0 items-center gap-2" />
+          <BrandLogo />
           <Link href="/" className="text-sm font-semibold text-slate-600 transition hover:text-[var(--waystay-orange)]">
             Back to traveler site
           </Link>
@@ -60,11 +60,7 @@ export default function Header() {
   return (
     <header className={isLandingPage ? 'ws-landing-header relative z-40' : 'sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur'}>
       <div className={`${isLandingPage ? 'ws-landing-header-inner' : 'max-w-6xl px-4 py-3'} mx-auto flex items-center justify-between gap-4`}>
-        <BrandLogo
-          className={`flex shrink-0 items-center ${isLandingPage ? 'ws-landing-brand gap-4' : 'gap-2'}`}
-          imageClassName={isLandingPage ? 'ws-landing-logo w-auto' : 'h-9 w-auto'}
-          textClassName={isLandingPage ? 'ws-landing-wordmark font-normal tracking-tight' : 'text-xl font-normal tracking-tight'}
-        />
+        <BrandLogo />
 
         <nav className="flex items-center gap-2 sm:gap-3">
           {isLandingPage && (
@@ -77,7 +73,7 @@ export default function Header() {
           {!session ? (
             <Link href={`/login?returnTo=${returnTo}`} className={`${isLandingPage ? 'border border-slate-300 bg-white text-[var(--waystay-blue)] hover:border-[var(--waystay-orange)]' : 'bg-[var(--waystay-orange)] text-white hover:bg-[var(--waystay-orange-dark)]'} inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold shadow-sm transition`}>
               {isLandingPage && <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current"><circle cx="12" cy="8" r="4" strokeWidth="1.8" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" strokeWidth="1.8" strokeLinecap="round" /></svg>}
-              {isLandingPage ? 'Log in' : 'Sign in / Sign up'}
+              {isLandingPage ? 'Log in' : <><span className="sm:hidden">Sign in</span><span className="hidden sm:inline">Sign in / Sign up</span></>}
             </Link>
           ) : (
             <div className="relative" ref={menuRef}>
