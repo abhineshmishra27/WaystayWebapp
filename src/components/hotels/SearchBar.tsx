@@ -12,6 +12,7 @@ const HOUR_SLOT_OPTIONS = [
 type SlotValue = 'H3' | 'H6' | 'H12' | 'FULLDAY'
 type RentalMode = 'hourly' | 'day'
 const MAX_GUESTS_PER_ROOM = 3
+// Keep recent location searches available across visits in this browser.
 const RECENT_SEARCHES_KEY = 'waystay:recent-searches'
 
 interface PlaceSuggestion {
